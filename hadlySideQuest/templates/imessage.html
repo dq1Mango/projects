@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Centered Form</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      height: 100vh;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+    }
+
+    .form-container {
+      background: white;
+      padding: 30px 40px;
+      max-width: 50%;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .nameText {
+      padding: 10px;
+      width: 250px;
+      margin-bottom: 15px;
+      border: 2px solid #ccc;
+      border-radius: 20px;
+      text-align: center;
+    }
+
+    .emojiText {
+      padding: 10px;
+      width: 170px;
+      margin-bottom: 15px;
+      border: 2px solid #ccc;
+      border-radius: 20px;
+      text-align: center;
+    }
+
+    input[type="submit"] {
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .errorMessage {
+	color: red;
+	display: none;
+    }
+
+    input[type="submit"]:hover {
+      background-color: #45a049;
+      display: none;
+    }
+  </style>
+
+  <script src="/regex.js"></script>
+  </head>
+<body>
+  <div class="form-container">
+    <h1>Mission Statement:</h1>
+    <p>Hey Put your name in it and send it to 10 different people We’re trying to make the longest iMessage for the 2026 Guinness World Records. Put your name below (copy it) and send it to 10 people, put 3 or less emojis to describe you and add your name!!Don’t be the loser to break the chain!!
+
+This started in Meridian, ID</p>
+    <h2>Add Your Name and Emojis</h2>
+    <form onsubmit="return false">
+      <input type="text" id="leftEmoji" class="emojiText" placeholder="Enter your emojis here" required />
+      <input type="text" id="name" class="nameText" placeholder="Enter your text here" required />
+      <input type="text" id="rightEmoji" class="emojiText" placeholder="Enter your emojis here" required />
+      <br/>
+      <p class=errorMessage id=errorMessage>Error Message</p>
+      <input type="submit" value="Submit" id="submit"/>
+    </form>
+
+    <br/>
+    <h3>Current Message:</h3>
+    {% for name in messages %}
+    	<a>{{ name }}</a> <br/>
+    {% endfor %}
+  </div>
+</body>
+<script>
+
+	const leftEmoji = document.getElementById("leftEmoji");
+	const rightEmoji = document.getElementById("rightEmoji");
+	const nameText = document.getElementById("name");
+	const errorMessage = document.getElementById("errorMessage");
+	const submitButton = document.getElementById("submit");
+	
+	var emojiLengthError = false;
+	var emojiContentError = false;
+	var nameLengthError = false;
+	var emptyError = false;
+	var validForm = false;
+
+	leftEmoji.addEventListener("input", function(event) {
+		rightEmoji.value = leftEmoji.value
+		checkEmojiInput(leftEmoji.value) //not hardcoded at all
+	});
+
+	rightEmoji.addEventListener("input", function(event) {
+		leftEmoji.value = rightEmoji.value
+		checkEmojiInput(leftEmoji.value)
+	});
+
+	//totally made this myself
+	const regex = emojiRegex()
+
+	function checkEmojiInput(emojis) {
+
+		const matches = emojis.matchAll(regex);
+		var onlyEmojis = "";
+		var length = 0;
+
+		for (match of matches) {
+			onlyEmojis += match[0];
+			length += 1;
+		}
+
+		
+		leftEmoji.value = onlyEmojis;
+		rightEmoji.value = onlyEmojis;
+
+		if (length > 4) {
+			emojiLengthError = true;
+			console.log("too long")
+		} else {
+			emojiLengthError = false;
+		}
+
+
+		updateError()
+
+		//for (i=0; i < emojis.length; i++){
+		//	var unicode = emojis.codePointAt(i)
+		//	console.log(emojis[i] + " , unicode: " + unicode)
+		//	if ( unicode < 10000 ) { 
+		//		emojiContentError = true
+		//		updateError()
+		//		return
+		//	}
+		//}
+	
+		emojiContentError = false
+
+		updateError()
+	}
+
+	nameText.addEventListener("input", function(event) {
+		checkNameInput(nameText.value)
+	});	
+
+	function checkNameInput(name) {
+		
+		if (name != " ") {
+			emptyError = false;
+		}
+
+
+		for (i = 0; i < name.length; i++) {
+			if (name[i] == " ") {
+				nameLengthError = true;
+				updateError()
+				return
+			}
+		}
+
+		nameLengthError = false
+		updateError()
+	}
+
+	function updateError() {
+
+		errorMessage.style.display = "block"
+		validForm = false
+
+		if (emojiContentError) {
+			errorMessage.textContent = "Emojis must actually be emojis"
+			return
+		}
+
+		if (emojiLengthError) {
+
+			errorMessage.textContent = "Too many emojis :("
+			return
+		}
+
+		if (nameLengthError) {
+			
+			errorMessage.textContent = "First name only please"
+			return
+		}
+
+		if (emptyError) {
+			errorMessage.textContent = "Message must not be empty"
+			return
+		}
+
+		errorMessage.style.display = "none"
+		validForm = true
+
+	}
+
+	submitButton.addEventListener('click', function(event) {
+    		event.preventDefault(); // Prevents the default form submission (page reload)
+    		finalChecks(); // Call your custom function
+  	});
+	
+	function finalChecks() {
+		
+		console.log("i got called and validForm is: " + validForm);
+
+		if (!validForm) {
+			return	
+		}
+
+
+		if (leftEmoji.value == "" || nameText.value == "") {
+			emptyError = true
+			updateError()
+			return
+		}
+		
+		const finalMessage = leftEmoji.value + nameText.value + rightEmoji.value
+
+		const formData = new FormData();
+		formData.append('message', finalMessage);
+		
+		let currentLocation = window.location;
+		let postPath = "/newMessage"
+
+		fetch(postPath, {
+ 			method: 'POST',
+  			body: formData,
+		});
+	}
+
+
+
+</script>
+</html>
+
+
+
+
