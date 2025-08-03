@@ -69,11 +69,37 @@ func pickColor() string {
 	return ""
 }
 
+func nextTurn(current int, direction int) int {
+	next := Abs(current+direction) % len(alivePlayers)
+	if alivePlayers[next] {
+		return next
+	} else {
+		return nextTurn(next, direction)
+	}
+}
+
+func countAlivePlayers() int {
+	sum := 0
+	for _, value := range alivePlayers {
+		if value {
+			sum += 1
+		}
+
+	}
+	return sum
+}
+
+var alivePlayers = make(map[int]bool)
+
 func main() {
 	deck := MakeDeck()
 	deck.shuffle()
 
 	players := 2
+	// create alive players table
+	for i := range players {
+		alivePlayers[i] = true
+	}
 	hands := Deal(deck, players)
 
 	discardPile := &Deck{
@@ -135,7 +161,7 @@ func main() {
 			}
 			err = hands[turnIndex].Add(drawCard)
 			if err != nil {
-				KillPlayer(&hands, turnIndex, discardPile)
+				KillPlayer(hands, turnIndex, discardPile)
 				players -= 1
 			}
 
@@ -155,15 +181,14 @@ func main() {
 						direction *= -1
 					}
 
-					turnIndex = Abs(turnIndex+direction) % players
-
-					err = Draw(cardToPlay.number, deck, &hands[turnIndex], discardPile)
+					err = Draw(cardToPlay.number, deck, hands[nextTurn(turnIndex, direction)], discardPile)
 
 					if err != nil {
-						KillPlayer(&hands, turnIndex, discardPile)
+						KillPlayer(hands, turnIndex, discardPile)
 						players -= 1
 					}
 
+					turnIndex = nextTurn(turnIndex, direction)
 					activeColor = pickColor()
 
 				}
@@ -179,20 +204,21 @@ func main() {
 					direction *= -1
 
 				case 11: // skip
-					turnIndex = Abs(turnIndex+direction) % players
+					turnIndex = nextTurn(turnIndex, direction)
 
 				case 12: // skip-all
-					turnIndex = Abs(turnIndex-direction) % players
+					turnIndex = nextTurn(turnIndex, direction)
 
 				case 13, 14: // draw 2/4
-					turnIndex = Abs(turnIndex+direction) % players
-					err = Draw((cardToPlay.number-10)&6, deck, &hands[turnIndex], discardPile)
+					err = Draw((cardToPlay.number-10)&6, deck, hands[nextTurn(turnIndex, direction)], discardPile)
 					// how you like my fancy bit twiddling to advoid repeating code
 
 					if err != nil {
-						KillPlayer(&hands, turnIndex, discardPile)
+						KillPlayer(hands, turnIndex, discardPile)
 						players -= 1
 					}
+
+					turnIndex = nextTurn(turnIndex, direction)
 
 				case 15: // put down all of the color
 
@@ -209,16 +235,18 @@ func main() {
 				}
 			}
 		}
-
-		fmt.Println(len(hands), " players left")
-
-		//fmt.Println(hands[turnIndex].cards[action])
-		turnIndex = Abs(turnIndex+direction) % players
 		fmt.Println()
-
-		if hands[turnIndex].count == 0 || len(hands) == 1 {
+		fmt.Println(alivePlayers)
+		fmt.Println(nextTurn(turnIndex, 1))
+		fmt.Println(turnIndex)
+		if hands[turnIndex].count == 0 || countAlivePlayers() == 1 {
 			fmt.Println("Contgradulations player ", turnIndex, "you win!!!")
 			os.Exit(0)
 		}
+
+		//fmt.Println(hands[turnIndex].cards[action])
+		turnIndex = nextTurn(turnIndex, direction)
+		fmt.Println()
+
 	}
 }

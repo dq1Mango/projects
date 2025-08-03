@@ -157,7 +157,7 @@ func Deal(deck *Deck, players int) []hand {
 		hands[i] = initializeHand()
 	}
 
-	for range 7 {
+	for range 20 {
 		for i := range hands {
 			newCard, err := deck.Pop()
 			if err != nil {
@@ -212,7 +212,7 @@ func RefreshStacks(deck *Deck, discard *Deck) {
 	deck.shuffle()
 }
 
-func Draw(num int, deck *Deck, hand *hand, discard *Deck) error {
+func Draw(num int, deck *Deck, hand hand, discard *Deck) error {
 	for range num {
 		newCard, err := deck.Pop()
 		if err != nil {
@@ -238,7 +238,7 @@ func Abs(num int) int {
 	return num
 }
 
-func KillPlayer(hands *[]hand, index int, discard *Deck) {
+func KillPlayer(hands []hand, index int, discard *Deck) {
 	fmt.Println("killing player ... ", index)
 
 	topCard, err := discard.Pop()
@@ -246,7 +246,7 @@ func KillPlayer(hands *[]hand, index int, discard *Deck) {
 
 	}
 
-	for _, card := range (*hands)[index].cards {
+	for _, card := range hands[index].cards {
 		if card != nilCard {
 			discard.Push(card)
 		}
@@ -254,13 +254,10 @@ func KillPlayer(hands *[]hand, index int, discard *Deck) {
 
 	discard.Push(topCard)
 
+	alivePlayers[index] = false
+
 	// and who says go cant do one-liners
-	*hands = append((*hands)[0:index], (*hands)[index+1:]...)
-
-	fmt.Println()
-	fmt.Println("new hands: ", hands)
-
-	fmt.Println("there r ", len(*hands), " left")
+	// hands = append(hands[0:index], hands[index+1:]...)
 
 	//newHands := make([]hand, len(hands)-1)
 
