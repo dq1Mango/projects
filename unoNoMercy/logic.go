@@ -141,6 +141,7 @@ func (hand *hand) Remove(index int64) {
 	hand.count -= 1
 }
 
+// alternate remove using content and not index
 //func (hand *hand) Remove(card card) {
 //	for i := range 25 {
 //		if hand.cards[i] == card {
@@ -156,7 +157,7 @@ func Deal(deck *Deck, players int) []hand {
 		hands[i] = initializeHand()
 	}
 
-	for range 24 {
+	for range 7 {
 		for i := range hands {
 			newCard, err := deck.Pop()
 			if err != nil {
@@ -181,20 +182,22 @@ func ValidStart(card card) bool {
 
 func ValidMove(existingCard card, newCard card) bool {
 
+	// shouldnt be needed but gives me piece of mind
 	if newCard == nilCard {
 		return false
 	}
 
 	if newCard.color == "black" {
 		return true
-	}
+	} else {
 
-	if existingCard.color == newCard.color {
-		return true
-	}
+		if activeColor == newCard.color {
+			return true
+		}
 
-	if existingCard.number == newCard.number {
-		return true
+		if existingCard.number == newCard.number && existingCard.color != "black" {
+			return true
+		}
 	}
 
 	return false
@@ -235,13 +238,15 @@ func Abs(num int) int {
 	return num
 }
 
-func KillPlayer(hands []hand, index int, discard *Deck) {
+func KillPlayer(hands *[]hand, index int, discard *Deck) {
+	fmt.Println("killing player ... ", index)
+
 	topCard, err := discard.Pop()
 	if err != nil {
 
 	}
 
-	for _, card := range hands[index].cards {
+	for _, card := range (*hands)[index].cards {
 		if card != nilCard {
 			discard.Push(card)
 		}
@@ -250,10 +255,12 @@ func KillPlayer(hands []hand, index int, discard *Deck) {
 	discard.Push(topCard)
 
 	// and who says go cant do one-liners
-	hands = append(hands[0:index], hands[index+1:]...)
+	*hands = append((*hands)[0:index], (*hands)[index+1:]...)
 
 	fmt.Println()
 	fmt.Println("new hands: ", hands)
+
+	fmt.Println("there r ", len(*hands), " left")
 
 	//newHands := make([]hand, len(hands)-1)
 
