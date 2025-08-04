@@ -157,7 +157,7 @@ func Deal(deck *Deck, players int) []hand {
 		hands[i] = initializeHand()
 	}
 
-	for range 20 {
+	for range 7 {
 		for i := range hands {
 			newCard, err := deck.Pop()
 			if err != nil {
@@ -203,16 +203,22 @@ func ValidMove(existingCard card, newCard card) bool {
 	return false
 }
 
+// super weird edge case here where there are no cards lefts in either stack (all in player hands)
+// probably just gonna limit the players to 6 lol
 func RefreshStacks(deck *Deck, discard *Deck) {
+	fmt.Println("refreshing stacks...")
 	topCard, _ := discard.Pop()
-	deck.Push(topCard)
 
-	deck, discard = discard, deck
+	*deck, *discard = *discard, *deck
+
+	discard.Push(topCard)
 
 	deck.shuffle()
+	fmt.Println("new deck; ", deck)
+	fmt.Println("new disard; ", discard)
 }
 
-func Draw(num int, deck *Deck, hand hand, discard *Deck) error {
+func Draw(num int, deck *Deck, hand *hand, discard *Deck) error {
 	for range num {
 		newCard, err := deck.Pop()
 		if err != nil {

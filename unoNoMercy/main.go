@@ -27,7 +27,7 @@ func display(discard card, hands []hand, turn int) {
 		}
 		fmt.Print(i+1, ": ", colors[cardToPrint.color], cardToPrint, colors["none"], ", ")
 	}
-	fmt.Println()
+	fmt.Println(hands[turn].count, " cards")
 	fmt.Println("turn: ", turn)
 }
 
@@ -51,14 +51,15 @@ func getInput() int64 {
 
 func pickColor() string {
 
-	fmt.Print("What color would you like: ")
 	var input string
 
 	for true {
+
+		fmt.Print("What color would you like: ")
 		fmt.Scan(&input)
 
 		switch input {
-		case
+		case // look at this clever case i found on stack overrlow :)
 			"red", "yellow", "green", "blue":
 			return input
 		}
@@ -89,6 +90,28 @@ func countAlivePlayers() int {
 	return sum
 }
 
+func winMessage(player int) {
+	fmt.Println("Contgradulations player ", player, " you win!!!")
+	os.Exit(0)
+}
+
+func checkWin(hands []hand) {
+	if countAlivePlayers() == 1 {
+		for i, alive := range alivePlayers {
+			if alive {
+				winMessage(i)
+			}
+		}
+	}
+
+	for i, hand := range hands {
+		if hand.count == 0 && alivePlayers[i] {
+			winMessage(i)
+		}
+	}
+}
+
+// kind of an ugly global variable
 var alivePlayers = make(map[int]bool)
 
 func main() {
@@ -128,6 +151,7 @@ func main() {
 
 	activeColor = newCard.color
 
+	// prolly need to change this when we put it in the web
 	for true {
 		display(discardPile.Read(), hands, turnIndex)
 
@@ -162,7 +186,6 @@ func main() {
 			err = hands[turnIndex].Add(drawCard)
 			if err != nil {
 				KillPlayer(hands, turnIndex, discardPile)
-				players -= 1
 			}
 
 		} else {
@@ -173,23 +196,43 @@ func main() {
 
 			// perform correct action for the card
 			if cardToPlay.color == "black" {
+
+				activeColor = pickColor()
+
 				if cardToPlay.number == 1 {
-					// cry
+					for true { // i love this control flow idk why
+						drawCard, err := deck.Pop()
+
+						if err != nil {
+							RefreshStacks(deck, discardPile)
+							drawCard, _ = deck.Pop() // hope theres not an error the second time
+						}
+
+						fmt.Println("drawing card: ", drawCard) // no color for u lol
+						err = hands[nextTurn(turnIndex, direction)].Add(drawCard)
+						if err != nil {
+							KillPlayer(hands, nextTurn(turnIndex, direction), discardPile)
+							break
+						}
+
+						if drawCard.color == activeColor {
+							break
+						}
+
+					}
 				} else {
 
 					if cardToPlay.number == 4 {
 						direction *= -1
 					}
 
-					err = Draw(cardToPlay.number, deck, hands[nextTurn(turnIndex, direction)], discardPile)
+					turnIndex = nextTurn(turnIndex, direction)
+
+					err = Draw(cardToPlay.number, deck, &hands[turnIndex], discardPile)
 
 					if err != nil {
 						KillPlayer(hands, turnIndex, discardPile)
-						players -= 1
 					}
-
-					turnIndex = nextTurn(turnIndex, direction)
-					activeColor = pickColor()
 
 				}
 
@@ -210,15 +253,14 @@ func main() {
 					turnIndex = nextTurn(turnIndex, direction)
 
 				case 13, 14: // draw 2/4
-					err = Draw((cardToPlay.number-10)&6, deck, hands[nextTurn(turnIndex, direction)], discardPile)
+					turnIndex = nextTurn(turnIndex, direction)
+
+					err = Draw((cardToPlay.number-10)&6, deck, &hands[turnIndex], discardPile)
 					// how you like my fancy bit twiddling to advoid repeating code
 
 					if err != nil {
 						KillPlayer(hands, turnIndex, discardPile)
-						players -= 1
 					}
-
-					turnIndex = nextTurn(turnIndex, direction)
 
 				case 15: // put down all of the color
 
@@ -231,20 +273,13 @@ func main() {
 						}
 					}
 
-					discardPile.Push(cardToPlay) // replay the card
+					discardPile.Push(cardToPlay) // un un-play the card
 				}
 			}
 		}
-		fmt.Println()
-		fmt.Println(alivePlayers)
-		fmt.Println(nextTurn(turnIndex, 1))
-		fmt.Println(turnIndex)
-		if hands[turnIndex].count == 0 || countAlivePlayers() == 1 {
-			fmt.Println("Contgradulations player ", turnIndex, "you win!!!")
-			os.Exit(0)
-		}
 
-		//fmt.Println(hands[turnIndex].cards[action])
+		checkWin(hands)
+
 		turnIndex = nextTurn(turnIndex, direction)
 		fmt.Println()
 
