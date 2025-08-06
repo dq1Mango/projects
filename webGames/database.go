@@ -2,20 +2,17 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type user struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type newUser struct {
-	Username        string `json:"username"`
-	Password        string `json:"password"`
-	ConfirmPassword string `json:"confirmPassword"`
+	id       int
+	username string
+	password string
 }
 
 func initDB() *sql.DB {
@@ -27,7 +24,8 @@ func initDB() *sql.DB {
 
 	initQuery := `
 	create table if not exists auth (
-		username minitext unique not null primary key,
+		id int auto increment primary key,
+		username minitext unique not null,
 		password char(60) not null
 	);
 	`
@@ -40,10 +38,16 @@ func initDB() *sql.DB {
 	return db
 }
 
-func userExists(db *sql.DB, username string) bool {
+func nameExists(db *sql.DB, username string) bool {
+
 	row := db.QueryRow("Select * From auth where username = ?", username)
-	fmt.Println(row)
-	return true
+
+	err := row.Scan()
+	if err == sql.ErrNoRows {
+		return false
+	} else {
+		return true
+	}
 }
 
 func newUser(db *sql.DB, username string, password []byte) error {
@@ -54,16 +58,29 @@ func newUser(db *sql.DB, username string, password []byte) error {
 	return nil
 }
 
-func getHash(db *sql.DB, username string) {
+func getHash(db *sql.DB, username string) (string, error) {
+
+	var user user
 
 	row := db.QueryRow("Select * From auth where username = ?", username)
+	err := row.Scan(&user.id, &user.username, &user.password)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", errors.New("User does not exist")
+		}
+		return "", err
+	}
+
+	return user.password, nil
 }
 
-func main() {
+func ain() {
 	db := initDB()
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
-	newUser(db, "mqngo", hash)
+	if hash == nil {
+	}
 
-	fmt.Println(userExists(db, "mqngo"))
+	fmt.Println(nameExists(db, "hi"))
+	fmt.Println(getHash(db, "mqngo"))
 }

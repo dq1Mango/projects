@@ -227,10 +227,10 @@
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
                 <div id="passwordRequirements" class="password-requirements">
-                    <span class="requirement" id="lengthReq">• At least 8 characters</span>
-                    <span class="requirement" id="upperReq">• One uppercase letter</span>
+                    <span class="requirement" id="lengthReq">• At least 1 characters</span>
+                    <!--<span class="requirement" id="upperReq">• One uppercase letter</span>
                     <span class="requirement" id="lowerReq">• One lowercase letter</span>
-                    <span class="requirement" id="numberReq">• One number</span>
+                    <span class="requirement" id="numberReq">• One number</span>-->
                 </div>
             </div>
             
@@ -263,7 +263,7 @@
             
             // Check length
             const lengthReq = document.getElementById('lengthReq');
-            if (password.length >= 8) {
+            if (password.length >= 1) {
                 lengthReq.classList.add('valid');
                 lengthReq.classList.remove('invalid');
             } else {
@@ -272,7 +272,7 @@
             }
             
             // Check uppercase
-            const upperReq = document.getElementById('upperReq');
+            /*const upperReq = document.getElementById('upperReq');
             if (/[A-Z]/.test(password)) {
                 upperReq.classList.add('valid');
                 upperReq.classList.remove('invalid');
@@ -299,7 +299,7 @@
             } else {
                 numberReq.classList.add('invalid');
                 numberReq.classList.remove('valid');
-            }
+            }*/
             
             updateSubmitButton();
         });
@@ -311,10 +311,7 @@
             const password = passwordInput.value;
             const confirmPassword = confirmPasswordInput.value;
             
-            const isValidPassword = password.length >= 8 && 
-                                  /[A-Z]/.test(password) && 
-                                  /[a-z]/.test(password) && 
-                                  /[0-9]/.test(password);
+            const isValidPassword = password.length >= 1;
             
             const passwordsMatch = password === confirmPassword && password !== '';
             
@@ -324,6 +321,8 @@
                 submitBtn.disabled = true;
             }
         }
+
+        updateSubmitButton()
         
         // Form submission
         document.getElementById('registerForm').addEventListener('submit', function(e) {
@@ -375,7 +374,8 @@
                 }, 2000);
             })
             .catch(error => {
-                showError('Registration failed. Username or email may already exist.');
+                showError('Registration failed. Username may already exist.');
+              //console.log(error)
             });
         });
         

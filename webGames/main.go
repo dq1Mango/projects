@@ -2,11 +2,30 @@ package main
 
 import (
 	//	"fmt"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
 )
+
+// Session middleware for authentication
+func AuthRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		userID := session.Get("user_id")
+
+		if userID == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Please login first"})
+			c.Abort()
+			return
+		}
+
+		// Set user info in context
+		c.Set("user_id", userID)
+		c.Next()
+	}
+}
 
 func main() {
 	r := gin.Default()
@@ -41,20 +60,21 @@ func main() {
 			return
 		}
 
-		users, err := db.Query("select * from auth where username = \"" + user.Username + "\"")
-		if users != nil {
+		// check avaliability
+		if nameExists(db, user.Username) {
 			c.JSON(400, gin.H{"error": "Username is taken"})
 			return
 		}
 
 		// Hash password
-		_, err = bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "Server error"})
 			return
 		}
 
 		// database logic
+		newUser(db, user.Username, hash)
 
 	})
 
@@ -66,6 +86,17 @@ func main() {
 		//username := c.PostForm("username")
 		//password := c.PostForm("password")
 
+	})
+
+	r.GET("/me", func(c *gin.Context) {
+		session := sessions.Default(c)
+		userID := session.Get("user_id")
+		username := session.Get("username")
+
+		c.JSON(http.StatusOK, gin.H{
+			"user_id":  userID,
+			"username": username,
+		})
 	})
 
 	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
