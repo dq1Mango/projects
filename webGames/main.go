@@ -11,6 +11,7 @@ import (
 func main() {
 	r := gin.Default()
 	r.LoadHTMLGlob("templates/*")
+	db := initDB()
 
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -40,8 +41,14 @@ func main() {
 			return
 		}
 
+		users, err := db.Query("select * from auth where username = \"" + user.Username + "\"")
+		if users != nil {
+			c.JSON(400, gin.H{"error": "Username is taken"})
+			return
+		}
+
 		// Hash password
-		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		_, err = bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "Server error"})
 			return
