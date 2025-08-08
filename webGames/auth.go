@@ -41,6 +41,7 @@ func genToken(id int) (string, error) {
 }
 
 func decodeToken(tokenString string) (*claims, error) {
+
 	// this gets a little ugly
 	token, err := jwt.ParseWithClaims(
 		tokenString, &claims{},

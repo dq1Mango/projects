@@ -1,7 +1,7 @@
 package main
 
 import (
-	//	"fmt"
+	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
@@ -9,21 +9,11 @@ import (
 	"net/http"
 )
 
-// Session middleware for authentication
-func AuthRequired() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		session := sessions.Default(c)
-		userID := session.Get("user_id")
-
-		if userID == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Please login first"})
-			c.Abort()
-			return
-		}
-
-		// Set user info in context
-		c.Set("user_id", userID)
-		c.Next()
+func setJWTCookie(c *gin.Context) {
+	token, err := genToken()
+	if err != nil {
+		fmt.Println("Error in generating auth token: ", err)
+		c.JSON(500, gin.H{"error": "Internal Server Error"})
 	}
 }
 
@@ -43,38 +33,38 @@ func main() {
 	})
 
 	r.POST("/register", func(c *gin.Context) {
-		var user struct {
+		var newUser struct {
 			Username        string `json:"username"`
 			Password        string `json:"password"`
 			ConfirmPassword string `json:"confirmPassword"`
 		}
 
-		if err := c.ShouldBindJSON(&user); err != nil {
+		if err := c.ShouldBindJSON(&newUser); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid request"})
 			return
 		}
 
 		// Validate passwords match
-		if user.Password != user.ConfirmPassword {
+		if newUser.Password != newUser.ConfirmPassword {
 			c.JSON(400, gin.H{"error": "Passwords do not match"})
 			return
 		}
 
 		// check avaliability
-		if nameExists(db, user.Username) {
+		if nameExists(db, newUser.Username) {
 			c.JSON(400, gin.H{"error": "Username is taken"})
 			return
 		}
 
 		// Hash password
-		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), bcrypt.DefaultCost)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "Server error"})
 			return
 		}
 
 		// database logic
-		newUser(db, user.Username, hash)
+		makeNewUser(db, newUser.Username, hash)
 
 	})
 
