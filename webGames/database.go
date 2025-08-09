@@ -89,7 +89,10 @@ func getId(db *sql.DB, username string) (int, error) {
 
 	err := row.Scan(&user.id)
 	if err != nil {
-		return 0, errors.New("Could not find user")
+		if err == sql.ErrNoRows {
+			return 0, errors.New("Could not find user")
+		}
+		return 0, err
 	}
 
 	return user.id, nil
@@ -111,7 +114,7 @@ func getUserName(db *sql.DB, id int) (string, error) {
 
 }
 
-func getHash(db *sql.DB, id int) (string, error) {
+func getHash(db *sql.DB, id int) ([]byte, error) {
 
 	var user user
 
@@ -119,12 +122,12 @@ func getHash(db *sql.DB, id int) (string, error) {
 	err := row.Scan(&user.password)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", errors.New("User does not exist")
+			return nil, errors.New("User does not exist")
 		}
-		return "", err
+		return nil, err
 	}
 
-	return user.password, nil
+	return []byte(user.password), nil
 }
 
 // all these get_ functions kinda do the same thing ... hmmmmm
