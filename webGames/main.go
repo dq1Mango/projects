@@ -32,6 +32,16 @@ func main() {
 
 	r.GET("/dashboard", authorize(), func(c *gin.Context) {
 
+		userId, _ := c.Get("id")
+		id := userId.(int)
+		username, err := getUserName(db, id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "could not find username",
+			})
+		}
+
+		c.HTML(http.StatusOK, "dashboard.tmpl.html", gin.H{"name": username})
 	})
 
 	r.GET("/me", authorize(), func(c *gin.Context) {

@@ -57,7 +57,7 @@ func authorizePrime() gin.HandlerFunc {
 			return
 		}
 
-		c.Redirect(http.StatusFound, "/me")
+		c.Redirect(http.StatusFound, "/dashboard")
 		c.Abort()
 		return
 	}
@@ -100,7 +100,7 @@ func registerLogic(db *sql.DB) gin.HandlerFunc {
 
 		setJWTCookie(c, userId)
 
-		c.Redirect(http.StatusFound, "/me")
+		c.Redirect(http.StatusFound, "/dashboard")
 
 	}
 }
@@ -132,7 +132,7 @@ func loginLogic(db *sql.DB) gin.HandlerFunc {
 
 		setJWTCookie(c, id)
 
-		c.Redirect(302, "/me")
+		c.Redirect(302, "/dashboard")
 
 	}
 }
