@@ -22,13 +22,17 @@ func initDB() *sql.DB {
 		panic(err)
 	}
 
+	// crude small statement to make sure the db works how we think it works that we might as well just run every boot up
 	initQuery := `
 	create table if not exists auth (
-		id int autoincrement not null primary key,
+		id int auto_increment not null primary key,
 		username minitext unique not null,
 		password char(60) not null
 	);
+	create table if not exists nextUserId (id int);
+	Insert Into nextUserId (id) Select 0 Where NOT Exists (select * from nextUserId);
 	`
+	//Insert into auth (id, username, password) values ('1', 'null', '000000000000000000000000000000000000000000000000000000000000');
 
 	_, err = db.Exec(initQuery)
 	if err != nil {
@@ -50,12 +54,32 @@ func nameExists(db *sql.DB, username string) bool {
 	}
 }
 
-func makeNewUser(db *sql.DB, username string, password []byte) error {
-	_, err := db.Exec("Insert Into auth (username, password) Values (?, ?)", username, password)
+// couldnt get auto_increment to work so i just made it myself
+func getNextId(db *sql.DB) int {
+	var id int
+
+	row := db.QueryRow("select * from nextUserId")
+
+	err := row.Scan(&id)
+	if err != nil {
+		return -1
+	}
+
+	_, err = db.Exec("Update nextUserId Set id = ?", id+1)
 	if err != nil {
 		panic(err)
 	}
-	return nil
+
+	return id
+}
+
+func makeNewUser(db *sql.DB, username string, password []byte) (int, error) {
+	nextId := getNextId(db)
+	_, err := db.Exec("Insert Into auth (id, username, password) Values (?, ?, ?)", nextId, username, password)
+	if err != nil {
+		panic(err)
+	}
+	return nextId, nil
 }
 
 func getId(db *sql.DB, username string) (int, error) {
@@ -69,6 +93,22 @@ func getId(db *sql.DB, username string) (int, error) {
 	}
 
 	return user.id, nil
+}
+
+func getUserName(db *sql.DB, id int) (string, error) {
+	var user user
+
+	row := db.QueryRow("Select username From auth where id = ?", id)
+	err := row.Scan(&user.username)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", errors.New("User does not exist")
+		}
+		return "", err
+	}
+
+	return user.username, nil
+
 }
 
 func getHash(db *sql.DB, id int) (string, error) {
@@ -87,14 +127,16 @@ func getHash(db *sql.DB, id int) (string, error) {
 	return user.password, nil
 }
 
-func main() {
+// all these get_ functions kinda do the same thing ... hmmmmm
+
+func ain() {
 	db := initDB()
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
 	if hash == nil {
 	}
 
-	makeNewUser(db, "mqngo", hash)
+	makeNewUser(db, "mqngo2", hash)
 
 	fmt.Println(nameExists(db, "hi"))
 	name, _ := getId(db, "mqngo")

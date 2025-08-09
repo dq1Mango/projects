@@ -2,18 +2,57 @@ package main
 
 import (
 	"fmt"
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
 )
 
-func setJWTCookie(c *gin.Context) {
-	token, err := genToken()
+func setJWTCookie(c *gin.Context, id int) {
+	token, err := genToken(id)
 	if err != nil {
 		fmt.Println("Error in generating auth token: ", err)
 		c.JSON(500, gin.H{"error": "Internal Server Error"})
+	}
+
+	c.SetCookie("auth", token, 3600*24*7, "/", "", false, true) // flip second to last arg when i finally figure out https
+}
+
+func authorize() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := c.Cookie("auth")
+		if err != nil {
+			unauthorized(c)
+		}
+
+		claims, err := decodeToken(token)
+		if err != nil {
+			unauthorized(c)
+		}
+
+		// implement token refresh here
+
+		c.Set("id", claims.Id)
+
+		c.Next()
+	}
+}
+
+func authorizePrime() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := c.Cookie("auth")
+		if err != nil {
+			c.Next()
+		}
+
+		_, err = decodeToken(token)
+		if err != nil {
+			c.Next()
+		}
+
+		c.Redirect(http.StatusFound, "/me")
+		c.Abort()
+		return
 	}
 }
 
@@ -28,7 +67,7 @@ func main() {
 		})
 	})
 
-	r.GET("/register", func(c *gin.Context) {
+	r.GET("/register", authorizePrime(), func(c *gin.Context) {
 		c.HTML(http.StatusOK, "signup.html", nil)
 	})
 
@@ -64,7 +103,11 @@ func main() {
 		}
 
 		// database logic
-		makeNewUser(db, newUser.Username, hash)
+		userId, _ := makeNewUser(db, newUser.Username, hash)
+
+		setJWTCookie(c, userId)
+
+		c.Redirect(300, "/me")
 
 	})
 
@@ -78,13 +121,15 @@ func main() {
 
 	})
 
-	r.GET("/me", func(c *gin.Context) {
-		session := sessions.Default(c)
-		userID := session.Get("user_id")
-		username := session.Get("username")
+	r.GET("/me", authorize(), func(c *gin.Context) {
+
+		userId, _ := c.Get("id") // it will exists trust
+		id := userId.(int)
+
+		username, _ := getUserName(db, id)
 
 		c.JSON(http.StatusOK, gin.H{
-			"user_id":  userID,
+			"user_id":  id,
 			"username": username,
 		})
 	})
