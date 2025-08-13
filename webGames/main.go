@@ -18,6 +18,10 @@ func main() {
 		})
 	})
 
+	r.GET("/", func(c *gin.Context) {
+		c.Redirect(302, "/login")
+	})
+
 	r.GET("/register", authorizePrime(), func(c *gin.Context) {
 		c.HTML(http.StatusOK, "signup.html", nil)
 	})
@@ -56,6 +60,14 @@ func main() {
 			"username": username,
 		})
 	})
+
+	//r.GET("/static", func(c *gin.Context) {
+	//	g.HTML
+	//})
+
+	r.StaticFile("/static", "./svelte/dist/index.html")
+
+	r.Static("/assets", "./svelte/dist/assets")
 
 	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
