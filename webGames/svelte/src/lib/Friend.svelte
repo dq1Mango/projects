@@ -3,8 +3,14 @@
 </script>
 
 <div class="flex-container">
-  <h3>{name}</h3>
-  <p>{presence}, {duration}</p>
+  <div class="friend-text">
+
+    <h3>{name}</h3>
+    <p>{presence}, {duration}</p>
+  </div>
+  <div>
+  </div>
+
 </div>
 
 <style>
@@ -12,13 +18,17 @@
     color: var(--text)
   }
   p {color: var(--flamingo)}
-
+  
   .flex-container {
-    outline-width: 5px;
-    outline-style: solid;
-    outline-color: var(--maroon);
+    display: flex;
 
-    margin: 10px ;
-    padding-left: 10px;
+    border-width: 0.2em;
+    border-style: solid;
+    border-color: var(--sapphire);
+    border-radius: 1em;
+    
+    padding: 1em;
+
+    line-height: 0.2em;
 }
 </style>
