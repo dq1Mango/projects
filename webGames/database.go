@@ -130,8 +130,49 @@ func getHash(db *sql.DB, id int) ([]byte, error) {
 	return []byte(user.password), nil
 }
 
-// all these get_ functions kinda do the same thing ... hmmmmm
+func getFriends(db *sql.DB, id int) ([]int, error) {
+	var friends []int
 
+	row := db.QueryRow("Select friends From friends where id = ?", id)
+	err := row.Scan(&friends)
+	if err != nil {
+		return nil, err
+	}
+
+	return friends, nil
+}
+
+func addFriends(db *sql.DB, id int, friend int) error {
+
+	err, _ := db.Exec("Insert Into friends ()", id)
+	if err != nil {
+		return nil, err
+	}
+
+	return friends, nil
+}
+
+type Profile struct {
+	Id       int
+	Name     string
+	Status   int
+	Duration int
+}
+
+// big tech core
+func getUserProfile(db *sql.DB, id int) (Profile, error) {
+	var profile Profile
+
+	row := db.QueryRow("Select * From profile Where id = ?", id)
+	err := row.Scan(&profile)
+	if err != nil {
+		return profile, err
+	}
+
+	return profile, nil
+}
+
+// all these get_ functions kinda do the same thing ... hmmmmm
 func ain() {
 	db := initDB()
 
