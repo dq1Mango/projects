@@ -128,7 +128,7 @@ def addNode(node, index, change, oldId):
 def addAdjacents(nodeId):
         
     print(nodeId)
-    if nodeId > 1000:
+    if nodeId > 26000:
         print("ended the bad way")
         return
 
