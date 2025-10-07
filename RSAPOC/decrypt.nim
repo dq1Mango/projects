@@ -1,0 +1,146 @@
+import os
+import std/math
+import std/rdstdin
+import json
+from std/strutils import parseInt, normalize
+
+proc printHelp() = 
+  echo """
+
+Silly little RSA demonstration written in Nim by Thomas Ranney
+
+  ./decrypt [publicKey] [options]
+
+Options:
+  -f: file        input file to decrypt (defaults to stdin)
+  -o: file        file to write output to (defaults to stdout)
+
+Note: if an input file is supplied without an output file, the input is overwritten
+"""
+  quit()
+
+
+proc badUsage() = 
+    echo "ERROR, bad usage \nsee decrypt --help for more details"
+    quit()
+
+proc getInput(file: string): int=
+  try:
+    let input: int = parseInt(open(file).readLine())
+    return input
+  except IOError:
+    echo "ERROR: Could not open input file (does it exist?)"
+    quit()
+  except ValueError:
+    echo "ERROR: Supplied data is not in integer form"
+    quit()
+  
+type 
+  Public = object 
+    n: int 
+    e: int
+    d: int
+    p: int
+    q: int
+
+let args = commandLineParams()
+let length = args.len
+
+var #mhhhh very consistent variable names, types, and purposes
+  input: int
+  output: string = "stdout"
+
+if length == 0:
+  badUsage()
+
+elif length < 2:
+  if args[0] == "--help":
+    printHelp()
+  
+  try:
+    input = parseInt(readLineFromStdin("Enter data (in integer form) to decrypt: "))
+  except ValueError:
+    echo "ERROR: supplied data is not in integer form"
+    quit()
+
+  output = "stdout" #lets hope no one names their output file "stdout"
+
+elif length == 3:
+  if args[1] == "-f":
+    input = getInput(args[2])
+  
+  elif args[1] == "-o": #yeah but i already wrote the bad code for the encrypting, so no way im gonna fix it for the decrypting
+    try:
+      input = parseInt(readLineFromStdin("Enter data (in integer form) to decrypt: "))
+    except ValueError:
+      echo "ERROR: supplied data is not in integer form"
+      quit()
+
+    output = args[2]
+
+  else:
+    badUsage()
+
+elif length == 5:
+  if args[1] == "-f" and args[3] == "-o":
+    input = getInput(args[2])
+    output = args[4]
+
+  if args[3] == "-f" and args[1] == "-o":
+    input = getInput(args[4])
+    output = args[2]
+
+  else:
+    badUsage()
+   
+else:
+  badUsage()
+
+var key: Public
+try:
+  key = to(parseJson(readFile(args[0])), Public)
+except IOError:
+  echo "ERROR: Cannot open public key file (does it exist)"
+  quit()
+except ValueError:
+  echo "ERROR: Public key of incorrect format (run ./generateRSAKeysInsteadOfEnglish to generate a valid public key)"
+  quit()
+
+let n = key.n
+let d = key.d
+
+echo "private key:", key
+echo "cyphertext:", input
+
+proc modularMathILearnedFromKeyser(b: int, e: int, m: int): int =
+  result = b
+  for i in 2..e:
+    result = b * result mod m
+    
+
+let data: int = modularMathILearnedFromKeyser(input, d, n)
+
+if output == "stdout":
+  echo "decrypted data: " & $data
+  quit()
+
+var
+  f: File
+if open(f, output):
+  let proceed: string = readLineFromStdin("Are you sure you want to overwrite file \"" & output & "\" (Y or N): ")
+
+  if normalize(proceed) != "y": #more like Y or anything besides Y
+    if normalize(proceed) == "n":
+      echo "Quitting"
+      quit()
+    else:
+      echo "Unexpected Input: Quitting"
+      quit()
+
+try:
+  writeFile(output, $data)
+except:
+  echo "Unable to write to file \"" & output & "\""
+  echo "Heres your decrypted data anyway: " & $data
+
+
