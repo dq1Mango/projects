@@ -1,0 +1,55 @@
+import {write} from "bun"
+
+const badData = {
+  data: [
+    {
+      text: "$10 bounty on Sophia Saverese",
+      id: "1856011292244324690",
+      edit_history_tweet_ids: [ "1856011292244324690" ]
+    }, {
+      text: "$5 bounty on Michael S",
+      id: "1856009627864805821",
+      edit_history_tweet_ids: [ "1856009627864805821" ]
+    }, {
+      text: "Grace Metz sporked Adrian R https://t.co/BXTfYIe01x",
+      id: "1856002145260114345",
+      edit_history_tweet_ids: [ "1856002145260114345" ]
+    }, {
+      text: "Yousuf Khan sporked Colin Doran",
+      id: "1855956937537466795",
+      edit_history_tweet_ids: [ "1855956937537466795" ]
+    }, {
+      text: "Dottie Pieklik sporked AJ Hyland https://t.co/DDOUlKWkad",
+      id: "1855956157325521222",
+      edit_history_tweet_ids: [ "1855956157325521222" ]
+    }, {
+      text: "Juilian Cupp GOT SPORKED by Becca Wilcox (💙💙💛💛) https://t.co/ekY473XM3m",
+      id: "1855387702209745392",
+      edit_history_tweet_ids: [ "1855387702209745392" ]
+    }, {
+      text: "Grace Metz SPORKED Ella Mackey",
+      id: "1855115449534476793",
+      edit_history_tweet_ids: [ "1855115449534476793" ]
+    }, {
+      text: "Claire T sporked Lincoln S https://t.co/r14RZxSp10",
+      id: "1854917322881810715",
+      edit_history_tweet_ids: [ "1854917322881810715" ]
+    }, {
+      text: "$5 bounty on Pierce Latona",
+      id: "1854554683806810613",
+      edit_history_tweet_ids: [ "1854554683806810613" ]
+    }, {
+      text: "ISADORA D was sporked by Adeline Cox",
+      id: "1854536092529094710",
+      edit_history_tweet_ids: [ "1854536092529094710" ]
+    }
+  ],
+  meta: {
+    result_count: 10,
+    newest_id: "1856011292244324690",
+    oldest_id: "1854536092529094710",
+    next_token: "7140dibdnow9c7btw4b1z85qy32ijqmx1kylmh7ouo8xc"
+  }
+}
+
+write("print.txt", JSON.stringify(badData))

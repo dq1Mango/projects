@@ -1,0 +1,67 @@
+with open('./data.md', 'r') as file:
+    # Read all lines of the file into a list
+    badlines = file.read().split("·")
+
+messages = []
+for line in badlines:
+    messages.append(line.strip())
+
+rawData = []
+for message in messages:
+    message = message.split("\n")
+    try:
+        rawData.append({
+            "date": message[0],
+            "content": message[1]
+        })
+    except:
+        pass
+
+file = open("./data.txt", "w")
+file.write(data)
+alive = []
+killers = {}
+
+for data in rawData:
+    message = data["content"].lower()
+    if "sporked" in message: #maybe add like "got out" here too if possible or u care
+        if " by " not in message:
+            message = message.split("sporked")
+            if message[0] not in alive:
+                alive += [message[0]]
+                killers[message[0]] = 1
+            else:
+                killers[message[0]] += 1
+        else:
+            message = message.split("sporked")
+            if message[1].split("by")[0] not in alive:
+                alive += [message[1].split("by")[1]]
+                killers[message[1].split("by")[1]] = 1
+            else:
+                killers[message[1].split("by")[1]] += 1
+
+print({k: v for k, v in sorted(killers.items(), key=lambda item: item[1], reverse=True)})
+
+
+for data in rawData:
+    message = data["content"].lower()
+    if "sporked" in message: #maybe add like "got out" here too if possible or u care
+        if " by " not in message:
+            message = message.split("sporked")
+            print("running out of time", message[1])
+            if message[1].strip() in alive:
+                alive.remove(message[1].strip())
+        else:
+            message = message.split("sporked")
+            print(message[0].split("got")[0])
+            if message[0].split("got")[0] in alive:
+                alive.remove(message[0].split("got")[0])
+
+
+print(alive)
+
+
+
+
+    
+
