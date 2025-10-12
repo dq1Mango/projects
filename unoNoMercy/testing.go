@@ -1,9 +1,12 @@
 package main
 
 import "fmt"
-import "math"
+
+func funMath(num int) {
+	fmt.Println((num - 10) & 6)
+}
 
 func man() {
-	fmt.Println(math.Abs(-3 % 2))
-	fmt.Println(math.Mod(-1, 2))
+	funMath(13)
+	funMath(14)
 }
