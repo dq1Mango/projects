@@ -231,6 +231,9 @@
           })
           .then((data) => {
             showSuccess("Login successful! Redirecting...");
+            //fetch("/login", {method: "GET"})
+            // kind of a hack but idc
+            location.reload();
           })
           .catch((error) => {
             showError("Invalid username or password");

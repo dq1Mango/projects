@@ -2,11 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type user struct {
@@ -31,6 +31,8 @@ func initDB() *sql.DB {
 	);
 	create table if not exists nextUserId (id int);
 	Insert Into nextUserId (id) Select 0 Where NOT Exists (select * from nextUserId);
+
+	create table if not exists friends (id int, json text);
 	`
 	//Insert into auth (id, username, password) values ('1', 'null', '000000000000000000000000000000000000000000000000000000000000');
 
@@ -130,26 +132,94 @@ func getHash(db *sql.DB, id int) ([]byte, error) {
 	return []byte(user.password), nil
 }
 
+func contains(slice []int, value int) (int, error) {
+	for i, v := range slice {
+		if v == value {
+			return i, nil
+		}
+	}
+
+	return -1, ErrNotInSlice
+
+}
+
+// ty stack overflow
+func remove(slice []int, s int) []int {
+	index, err := contains(slice, s)
+
+	if err != nil {
+		return slice
+	}
+
+	return append(slice[:index], slice[index+1:]...)
+}
+
 func getFriends(db *sql.DB, id int) ([]int, error) {
+	var jsonFriends []byte
 	var friends []int
 
-	row := db.QueryRow("Select friends From friends where id = ?", id)
-	err := row.Scan(&friends)
+	row := db.QueryRow("Select json From friends where id = ?", id)
+	err := row.Scan(&jsonFriends)
+
 	if err != nil {
+		if err == sql.ErrNoRows {
+
+			// manual json encoding which will surely not come back to bite me
+			db.Exec("Insert into friends (id, json) Values (?, ?)", id, "{[]}")
+
+			// this is not scary at all
+			return getFriends(db, id)
+		}
+
 		return nil, err
 	}
+
+	json.Unmarshal(jsonFriends, &friends)
 
 	return friends, nil
 }
 
-func addFriends(db *sql.DB, id int, friend int) error {
+func addFriend(db *sql.DB, id int, friend int) error {
 
-	err, _ := db.Exec("Insert Into friends ()", id)
+	//_, err := db.Exec("Insert Into friends ()", id)
+
+	friends, err := getFriends(db, id)
+
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return friends, nil
+	index, err := contains(friends, friend)
+
+	if index != -1 && err != ErrNotInSlice {
+		return ErrAlreadyInSlice
+	}
+
+	friends = append(friends, friend)
+
+	jsonFriends, err := json.Marshal(friends)
+
+	_, err = db.Exec("Update friends Set json = ? Where id = ?", jsonFriends, id)
+
+	return err
+}
+
+func removeFriend(db *sql.DB, id int, friend int) error {
+	friends, err := getFriends(db, id)
+
+	if err != nil {
+		return err
+	}
+
+	// not a built-in believe it or not
+	friends = remove(friends, friend)
+
+	jsonFriends, err := json.Marshal(friends)
+
+	_, err = db.Exec("Update friends Set json = ? Where id = ?", jsonFriends, id)
+
+	return err
+
 }
 
 type Profile struct {
@@ -176,13 +246,22 @@ func getUserProfile(db *sql.DB, id int) (Profile, error) {
 func ain() {
 	db := initDB()
 
-	hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
-	if hash == nil {
-	}
+	// hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	// if hash == nil {
+	// }
+	//
+	// makeNewUser(db, "mqngo2", hash)
+	//
+	// fmt.Println(nameExists(db, "hi"))
+	// name, _ := getId(db, "mqngo")
+	// fmt.Println(getHash(db, name))
 
-	makeNewUser(db, "mqngo2", hash)
+	err := addFriend(db, 3, 0)
 
-	fmt.Println(nameExists(db, "hi"))
-	name, _ := getId(db, "mqngo")
-	fmt.Println(getHash(db, name))
+	fmt.Println(err)
+
+	friends, err := getFriends(db, 0)
+	fmt.Println(err)
+
+	fmt.Println(friends)
 }

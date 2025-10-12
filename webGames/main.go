@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -45,7 +46,10 @@ func main() {
 			})
 		}
 
-		c.HTML(http.StatusOK, "dashboard.tmpl.html", gin.H{"name": username})
+		fmt.Println(username)
+
+		//c.HTML(http.StatusOK, "dashboard.tmpl.html", gin.H{"name": username})
+		c.HTML(http.StatusOK, "index.html", gin.H{})
 	})
 
 	r.GET("/me", authorize(), func(c *gin.Context) {

@@ -132,7 +132,9 @@ func loginLogic(db *sql.DB) gin.HandlerFunc {
 
 		setJWTCookie(c, id)
 
-		c.Redirect(302, "/dashboard")
+		c.JSON(http.StatusOK, gin.H{"redirect": "/dashboard"})
+
+		//c.Redirect(302, "/dashboard")
 
 	}
 }
