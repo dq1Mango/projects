@@ -189,8 +189,12 @@ impl Message {
         }
 
         new_line = String::from(yap[index..].to_string());
-        coldex = new_line.len() + 1;
-        new_line.push_str(" ");
+        coldex = new_line.len();
+
+        if new_line.len() > 0 {
+          new_line.push_str(" ");
+          coldex += 1;
+        }
       }
     }
 
@@ -291,9 +295,7 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
     model.counter.to_string().yellow(),
   ])]);
 
-  model
-    .content
-    .render(frame.area(), frame.buffer_mut(), settings, logger);
+  model.content.render(frame.area(), frame.buffer_mut(), settings, logger);
 
   // let mut messages: Vec<ratatui::prelude::Line> = Vec::new();
   //

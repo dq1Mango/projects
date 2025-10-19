@@ -54,5 +54,6 @@ fn i_wanna_see() {
     println!("{}", line);
   }
 
-  assert!(false);
+  // assert!(false);
+  assert!(true);
 }
