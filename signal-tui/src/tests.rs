@@ -1,5 +1,4 @@
 use crate::Message;
-use crate::Settings;
 
 #[test]
 fn test_tests() {
@@ -24,20 +23,14 @@ fn vecs_equal(vec1: Vec<String>, vec2: Vec<String>) -> bool {
 
 #[test]
 fn test_split_into_lines() {
-  let settings = &Settings {
-    borders: true,
-    message_width_ratio: 1.0,
-  };
-
   let width = 5;
 
   let mut message = Message::default();
   message.body = "this is myy message".to_string();
 
-  message.split_into_lines(settings, width);
+  let output = message.split_into_lines(width);
 
-  let raw_output = message.lines.unwrap();
-  for line in &raw_output {
+  for line in &output {
     println!("{}", line);
   }
 
@@ -45,5 +38,21 @@ fn test_split_into_lines() {
   for line in vec!["this", "is", "myy", "messa", "ge"] {
     expected.push(line.to_string());
   }
-  assert!(vecs_equal(raw_output, expected))
+
+  assert!(vecs_equal(output, expected))
+}
+
+#[test]
+fn i_wanna_see() {
+  let mut message = Message::default();
+  message.body = "first message lets make this message super loooong jfjlkdsjafkldjaflk it was not long enough last time time to yap fr".to_string();
+  let width = 76;
+
+  let output = message.split_into_lines(width);
+
+  for line in &output {
+    println!("{}", line);
+  }
+
+  assert!(false);
 }

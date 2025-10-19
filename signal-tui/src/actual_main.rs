@@ -1,5 +1,6 @@
 mod tests;
 use core::panic;
+use std::fmt::format;
 use std::fs::File;
 use std::io::Write;
 use std::{cmp::min, io::LineWriter, time::Duration, vec};
@@ -129,9 +130,11 @@ impl Message {
   fn render(&self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
     let block = Block::bordered().border_set(border::THICK);
 
-    let availible_width: u16 = (area.width as f32 * 0.9).round() as u16;
-    let mut new_area = area.clone();
-    new_area.width = availible_width;
+    let mut my_area = area.clone();
+    my_area.width = (area.width as f32 * settings.message_width_ratio) as u16;
+
+    // let mut new_area = area.clone();
+    // new_area.width = area.width;
     //
     // let mut lines: Vec<String> = Vec::new();
     //
@@ -152,14 +155,13 @@ impl Message {
       lines.push(Line::from(yap));
     }
 
-    Paragraph::new(lines).block(block).render(new_area, buf)
+    Paragraph::new(lines).block(block).render(my_area, buf)
     // .wrap(Wrap { trim: true })
   }
 }
 
-// if you need more than 255 lines sue me
 impl Message {
-  fn split_into_lines(&mut self, settings: &Settings, term_width: u16) {
+  fn split_into_lines(&mut self, term_width: u16) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut new_line = String::from("");
 
@@ -171,10 +173,10 @@ impl Message {
     for yap in self.body.split(" ") {
       let mut length = yap.len();
 
-      if coldex + yap.len() < availible_width {
+      if coldex + yap.len() <= availible_width {
         new_line.push_str(yap);
         new_line.push_str(" ");
-        coldex += yap.len();
+        coldex += yap.len() + 1;
       } else {
         lines.push(new_line.clone().trim_end().to_string());
 
@@ -187,33 +189,37 @@ impl Message {
         }
 
         new_line = String::from(yap[index..].to_string());
-        coldex = new_line.len();
+        coldex = new_line.len() + 1;
         new_line.push_str(" ");
       }
     }
 
     lines.push(new_line.clone().trim_end().to_string());
 
-    self.lines = Some(lines);
+    lines
   }
 }
 
 impl Chat {
   fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
+    let message_width: u16 = (area.width as f32 * settings.message_width_ratio) as u16 - 2;
+    logger.log(format!("width: {}", message_width));
+
     let mut index = 0;
     let mut y = self.location.offset * -1;
 
     while y < area.height as i16 && index < self.messages.len() {
-      logger.log(format!("{}", area.y));
-
       let message = &mut self.messages[index];
+
+      // only here for testing; remove later; breaks the fun "cache" system
+      message.lines = Some(message.split_into_lines(message_width));
 
       let result = &message.lines;
 
       match result {
         Some(_x) => {}
         None => {
-          message.split_into_lines(settings, area.width);
+          message.lines = Some(message.split_into_lines(message_width));
           let this_better_work = &message.lines;
           match this_better_work {
             Some(_x) => {}
