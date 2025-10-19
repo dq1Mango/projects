@@ -7,7 +7,27 @@ struct App {
   image: StatefulProtocol,
 }
 
+struct Settings {
+  borders: bool,
+}
+
+struct Test {
+  settings: Settings,
+}
+
+fn update_settings(settings: Settings) {
+  settings.borders = true;
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut settigns = Settings { borders: true };
+
+  let test = Test { settings: settigns };
+
+  settigns.borders = false;
+  update_settings(settings);
+  settigns.borders = false;
+  println!("{}", settigns.borders);
   // let backend = TestBackend::new(80, 30);
   let mut terminal = ratatui::init();
 
