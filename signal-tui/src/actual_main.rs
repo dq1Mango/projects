@@ -1,10 +1,12 @@
+#[cfg(test)]
 mod tests;
+
 use core::panic;
-use std::fmt::format;
 use std::fs::File;
 use std::io::Write;
-use std::{cmp::min, io::LineWriter, time::Duration, vec};
+use std::{time::Duration, vec};
 
+use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -12,8 +14,8 @@ use ratatui::{
   layout::Rect,
   style::Stylize,
   symbols::border,
-  text::{Line, Text},
-  widgets::{Block, Paragraph, Widget, Wrap},
+  text::Line,
+  widgets::{Block, Paragraph, Widget},
 };
 use std::fs::OpenOptions;
 
@@ -28,7 +30,7 @@ struct Model {
 enum RunningState {
   #[default]
   Running,
-  Done,
+  OhShit,
 }
 
 #[derive(PartialEq)]
@@ -37,11 +39,6 @@ enum Action {
   Decrement,
   Reset,
   Quit,
-}
-
-pub struct Settings {
-  borders: bool,
-  message_width_ratio: f32,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -59,9 +56,25 @@ pub struct Location {
 
 #[derive(Debug, Default)]
 pub struct Chat {
-  id: u8,
+  // id: u8,
   messages: Vec<Message>,
   location: Location,
+}
+
+pub struct Settings {
+  borders: bool,
+  message_width_ratio: f32,
+  identity: String,
+}
+
+impl Settings {
+  fn init() -> Self {
+    Settings {
+      borders: true,
+      message_width_ratio: 0.8,
+      identity: "me".to_string(),
+    }
+  }
 }
 
 pub struct Logger {
@@ -69,7 +82,7 @@ pub struct Logger {
 }
 
 impl Logger {
-  fn init(file_name: &str) -> Logger {
+  fn init(file_name: &str) -> Self {
     let mut file = OpenOptions::new()
       .write(true)
       .truncate(true)
@@ -93,6 +106,7 @@ impl Logger {
   }
 
   fn log(&mut self, log: String) {
+    // no clue why this works
     writeln!(self.file, "{}", log).expect("kaboom");
   }
 }
@@ -102,14 +116,14 @@ impl Model {
     let messages = vec![
       Message {
         body: String::from(
-          "first message lets make this message super loooong jfjlkdsjafkldjaflk it was not long enough last time time to yap fr",
+          "first message lets make this message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
-        sender: String::from(""),
+        sender: String::from("not me"),
         lines: None,
       },
       Message {
         body: String::from("second message"),
-        sender: String::from(""),
+        sender: String::from("me"),
         lines: None,
       },
     ];
@@ -127,11 +141,17 @@ impl Model {
 }
 
 impl Message {
-  fn render(&self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
+  fn render(&self, area: Rect, buf: &mut Buffer, settings: &Settings, _logger: &mut Logger) {
     let block = Block::bordered().border_set(border::THICK);
 
     let mut my_area = area.clone();
     my_area.width = (area.width as f32 * settings.message_width_ratio) as u16;
+
+    // "allign" the chat to the right if it was sent by you
+    // TODO: should add setting to toggle this behavior
+    if settings.identity == self.sender {
+      my_area.x += area.width - my_area.width;
+    }
 
     // let mut new_area = area.clone();
     // new_area.width = area.width;
@@ -161,6 +181,8 @@ impl Message {
 }
 
 impl Message {
+  // me after i find out this already exists in ratatui: -_-
+  //
   fn split_into_lines(&mut self, term_width: u16) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut new_line = String::from("");
@@ -206,6 +228,19 @@ impl Message {
 
 impl Chat {
   fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
+    let block = Block::bordered().border_set(border::THICK);
+    // .title(title.centered())
+    // .title_bottom(instructions.centered())
+    block.render(area, buf);
+
+    // shitty temp padding for the border
+    let mut area = area;
+    area.x += 1;
+    area.width -= 2;
+    area.height -= 2;
+    area.y += 1;
+    // end shitty tmp padding
+
     let message_width: u16 = (area.width as f32 * settings.message_width_ratio) as u16 - 2;
     logger.log(format!("width: {}", message_width));
 
@@ -249,14 +284,13 @@ fn main() -> color_eyre::Result<()> {
   // tui::install_panic_hook();
   let mut terminal = ratatui::init();
   let mut model = Model::init();
+  let settings = &Settings::init();
+
+  // regular lumber jack
   let logger = &mut Logger::init("log.txt");
   logger.log("testing".to_string());
-  let settings = &Settings {
-    borders: true,
-    message_width_ratio: 0.8,
-  };
 
-  while model.running_state != RunningState::Done {
+  while model.running_state != RunningState::OhShit {
     // Render the current view
     terminal.draw(|f| view(&mut model, f, settings, logger))?;
 
@@ -285,25 +319,24 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
     " Quit ".into(),
     "<Q> ".blue().bold(),
   ]);
-  let block = Block::bordered()
+  let _block = Block::bordered()
     .title(title.centered())
     .title_bottom(instructions.centered())
     .border_set(border::THICK);
 
-  let _counter_text = Text::from(vec![Line::from(vec![
-    "Value: ".into(),
-    model.counter.to_string().yellow(),
-  ])]);
+  // let _counter_text = Text::from(vec![Line::from(vec![
+  //   "Value: ".into(),
+  //   model.counter.to_string().yellow(),
+  // ])]);
 
-  model.content.render(frame.area(), frame.buffer_mut(), settings, logger);
+  let layout = Layout::new(
+    Direction::Horizontal,
+    vec![Constraint::Percentage(20), Constraint::Percentage(80)],
+  )
+  .split(frame.area());
 
-  // let mut messages: Vec<ratatui::prelude::Line> = Vec::new();
-  //
-  // for message in model.content.messages.clone() {
-  //   messages.push(Line::from(message.body));
-  // }
-  //
-  // let message_text = Text::from(messages);
+  model.content.render(layout[1], frame.buffer_mut(), settings, logger);
+
   //
   // frame.render_widget(
   //   Paragraph::new(message_text).right_aligned().block(block),
@@ -358,7 +391,7 @@ fn update(model: &mut Model, msg: Action) -> Option<Action> {
     Action::Reset => model.counter = 0,
     Action::Quit => {
       // You can handle cleanup and exit here
-      model.running_state = RunningState::Done;
+      model.running_state = RunningState::OhShit;
     }
   };
   None
