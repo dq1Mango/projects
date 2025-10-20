@@ -147,12 +147,6 @@ impl Message {
     let mut my_area = area.clone();
     my_area.width = (area.width as f32 * settings.message_width_ratio) as u16;
 
-    // "allign" the chat to the right if it was sent by you
-    // TODO: should add setting to toggle this behavior
-    if settings.identity == self.sender {
-      my_area.x += area.width - my_area.width;
-    }
-
     // let mut new_area = area.clone();
     // new_area.width = area.width;
     //
@@ -168,6 +162,17 @@ impl Message {
       None => {
         panic!("AAAaaaHHHhhh!!!")
       }
+    }
+
+    // shrink the message to fit if it does not need mutliple lines
+    if vec_lines.len() == 1 {
+      my_area.width = vec_lines[0].len() as u16 + 2;
+    }
+
+    // "allign" the chat to the right if it was sent by you
+    // TODO: should add setting to toggle this behavior
+    if settings.identity == self.sender {
+      my_area.x += area.width - my_area.width;
     }
 
     let mut lines: Vec<Line> = Vec::new();
