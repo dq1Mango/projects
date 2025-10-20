@@ -1,53 +1,163 @@
 === START OF LOG === 
 testing
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
-width: 50
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+this is the first line: 0
+adding this: h
+before add: 
+after add: h
+this is the first line: 1
+adding this: e
+before add: h
+after add: he
+this is the first line: 2
+adding this: l
+before add: he
+after add: hel
+this is the first line: 3
+adding this: l
+before add: hel
+after add: hell
+this is the first line: 4
+adding this: o
+before add: hell
+after add: hello
+this is the first line: 5
+adding this:  
+before add: hello
+after add: hello 
+this is the first line: 6
+adding this: w
+before add: hello 
+after add: hello w
+this is the first line: 7
+adding this: o
+before add: hello w
+after add: hello wo
+this is the first line: 8
+adding this: r
+before add: hello wo
+after add: hello wor
+this is the first line: 9
+adding this: l
+before add: hello wor
+after add: hello worl
+this is the first line: 10
+adding this: d
+before add: hello worl
+after add: hello world
+this is the first line: 11
+this is the first line: 11
+this is the first line: 11
+this is the first line: 10
+this is the first line: 9
+this is the first line: 8
+this is the first line: 7
+this is the first line: 6
+this is the first line: 6
+adding this: w
+before add: hello 
+after add: hello w
+this is the first line: 7
+adding this: o
+before add: hello w
+after add: hello wo
+this is the first line: 8
+adding this: r
+before add: hello wo
+after add: hello wor
+this is the first line: 9
+adding this: l
+before add: hello wor
+after add: hello worl
+this is the first line: 10
+adding this: d
+before add: hello worl
+after add: hello world
+this is the first line: 11
+this is the first line: 10
+this is the first line: 9
+this is the first line: 8
+adding this:  
+before add: hello wo
+after add: hello wo 
+this is the first line: 9
+adding this:  
+before add: hello wo 
+after add: hello wo  
+this is the first line: 10
+this is the first line: 10
+adding this: w
+before add: hello wo  
+after add: hello wo  w
+this is the first line: 11
+adding this: o
+before add: hello wo  w
+after add: hello wo  wo
+this is the first line: 12
+adding this: o
+before add: hello wo  wo
+after add: hello wo  woo
+this is the first line: 13
+adding this: r
+before add: hello wo  woo
+after add: hello wo  woor
+this is the first line: 14
+adding this: l
+before add: hello wo  woor
+after add: hello wo  woorl
+this is the first line: 15
+adding this: d
+before add: hello wo  woorl
+after add: hello wo  woorld
+this is the first line: 16
+this is the first line: 16
+this is the first line: 16
+this is the first line: 16
+this is the first line: 16

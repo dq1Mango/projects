@@ -1,4 +1,5 @@
 use crate::Message;
+use crate::MulitLineString;
 
 #[test]
 fn test_tests() {
@@ -26,11 +27,11 @@ fn test_split_into_lines() {
   let width = 5;
 
   let mut message = Message::default();
-  message.body = "this is myy message".to_string();
+  message.body = MulitLineString::init("this is myy message");
 
-  let output = message.split_into_lines(width);
+  let output = message.body.as_lines(width);
 
-  for line in &output {
+  for line in output {
     println!("{}", line);
   }
 
@@ -39,18 +40,20 @@ fn test_split_into_lines() {
     expected.push(line.to_string());
   }
 
-  assert!(vecs_equal(output, expected))
+  assert!(vecs_equal(output.to_vec(), expected))
 }
 
 #[test]
 fn i_wanna_see() {
   let mut message = Message::default();
-  message.body = "first message lets make this message super loooong jfjlkdsjafkldjaflk it was not long enough last time time to yap fr".to_string();
-  let width = 76;
+  message.body = MulitLineString::init(
+    "first message lets make this message super looong jjafkldjaflk it was not long enough last time time to yap fr",
+  );
+  let width = 68;
 
-  let output = message.split_into_lines(width);
+  let output = message.body.as_lines(width);
 
-  for line in &output {
+  for line in output {
     println!("{}", line);
   }
 

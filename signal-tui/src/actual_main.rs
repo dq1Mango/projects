@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use core::panic;
 use std::fs::File;
 use std::io::Write;
 use std::{time::Duration, vec};
@@ -23,7 +22,9 @@ use std::fs::OpenOptions;
 struct Model {
   counter: i32,
   running_state: RunningState,
-  content: Chat,
+  mode: Mode,
+  chats: Vec<Chat>,
+  chat_index: usize,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -33,18 +34,105 @@ enum RunningState {
   OhShit,
 }
 
+#[derive(Default, Debug, PartialEq)]
+pub enum Mode {
+  #[default]
+  Normal,
+  Insert,
+}
+
+// impl PartialEq for Mode {
+//   fn eq(&self, other: &Self) -> bool {}
+// }
+
 #[derive(PartialEq)]
 enum Action {
-  Increment,
-  Decrement,
   Reset,
+
+  Type(char),
+  Backspace,
+
+  SetMode(Mode),
+
   Quit,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Message {
+pub struct MulitLineString {
   body: String,
-  lines: Option<Vec<String>>,
+  cached_lines: Vec<String>,
+  cached_width: u16,
+  cached_length: u16,
+}
+
+impl MulitLineString {
+  fn init(str: &str) -> Self {
+    Self {
+      body: str.to_string(),
+      cached_lines: vec!["".to_string()],
+      cached_width: 0,
+      cached_length: 0,
+    }
+  }
+
+  fn update_cache(&mut self, width: u16) {
+    let mut lines: Vec<String> = Vec::new();
+    let mut new_line = String::from("");
+
+    // collumn index
+    let mut coldex = 0;
+    // let availible_width = (term_width as f32 * settings.message_width_ratio + 0.5) as usize;
+    let availible_width = width as usize;
+
+    for yap in self.body.split(" ") {
+      let mut length = yap.len();
+
+      if coldex + yap.len() <= availible_width {
+        new_line.push_str(yap);
+        new_line.push_str(" ");
+        coldex += yap.len() + 1;
+      } else {
+        lines.push(new_line.clone().trim_end().to_string());
+
+        let mut index = 0;
+
+        while length >= availible_width {
+          lines.push(yap[index..index + availible_width].to_string());
+          length -= availible_width;
+          index += availible_width;
+        }
+
+        new_line = String::from(yap[index..].to_string());
+        coldex = new_line.len();
+
+        if new_line.len() > 0 {
+          new_line.push_str(" ");
+          coldex += 1;
+        }
+      }
+    }
+
+    lines.push(new_line.clone().trim_end().to_string());
+
+    self.cached_length = lines.len() as u16;
+    self.cached_lines = lines;
+    self.cached_width = width;
+  }
+
+  // this is the one you call
+  fn as_lines(&mut self, width: u16) -> &Vec<String> {
+    // criteria for refreshing the cache
+    if width != self.cached_width || self.body.len() as u16 != self.cached_length {
+      self.update_cache(width);
+    }
+
+    return &self.cached_lines;
+  }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct Message {
+  body: MulitLineString,
   sender: String,
 }
 
@@ -59,6 +147,48 @@ pub struct Chat {
   // id: u8,
   messages: Vec<Message>,
   location: Location,
+  text_input: TextInput,
+}
+
+#[derive(Debug, Default)]
+pub struct TextInput {
+  body: MulitLineString,
+  cursor_index: usize,
+}
+
+impl TextInput {
+  fn render(&mut self, area: Rect, buf: &mut Buffer, logger: &mut Logger) {
+    let block = Block::bordered().border_set(border::THICK);
+
+    // shitty temp padding for the border
+    // let mut area = area;
+    // area.x += 1;
+    // area.width -= 2;
+    // area.height -= 2;
+    // area.y += 1;
+
+    let vec_lines = self.body.as_lines(area.width - 2).to_vec();
+    logger.log(format!("this is the first line: {}", self.cursor_index));
+    let mut lines: Vec<Line> = Vec::new();
+    for yap in vec_lines {
+      lines.push(Line::from(yap));
+    }
+
+    Paragraph::new(lines).block(block).render(area, buf);
+  }
+
+  fn insert_char(&mut self, char: char, logger: &mut Logger) {
+    logger.log(format!("adding this: {}", char));
+    logger.log(format!("before add: {}", self.body.body));
+    // some disgusting object-oriented blashphemy going on here
+    self.body.body.insert(self.cursor_index, char);
+    self.cursor_index += 1;
+    logger.log(format!("after add: {}", self.body.body));
+  }
+  fn delete_char(&mut self) {
+    self.cursor_index -= 1;
+    self.body.body.remove(self.cursor_index);
+  }
 }
 
 pub struct Settings {
@@ -69,7 +199,7 @@ pub struct Settings {
 
 impl Settings {
   fn init() -> Self {
-    Settings {
+    Self {
       borders: true,
       message_width_ratio: 0.8,
       identity: "me".to_string(),
@@ -112,19 +242,17 @@ impl Logger {
 }
 
 impl Model {
-  fn init() -> Model {
+  fn init() -> Self {
     let messages = vec![
       Message {
-        body: String::from(
+        body: MulitLineString::init(
           "first message lets make this message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
         sender: String::from("not me"),
-        lines: None,
       },
       Message {
-        body: String::from("second message"),
+        body: MulitLineString::init("second message"),
         sender: String::from("me"),
-        lines: None,
       },
     ];
 
@@ -134,18 +262,30 @@ impl Model {
       chat.messages.push(message);
     }
 
-    let mut app = Model::default();
-    app.content = chat;
-    app
+    chat.text_input = TextInput::default();
+
+    let chats: Vec<Chat> = vec![chat];
+
+    let mut model = Model::default();
+    model.chats = chats;
+    model.chat_index = 0;
+    model
+  }
+
+  // not really needed but it staves off the need for explicit liiftimes a little longer
+  fn current_chat(&mut self) -> &mut Chat {
+    &mut self.chats[self.chat_index]
   }
 }
 
 impl Message {
-  fn render(&self, area: Rect, buf: &mut Buffer, settings: &Settings, _logger: &mut Logger) {
+  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
     let block = Block::bordered().border_set(border::THICK);
 
+    // this ugly shadow cost me a good 15 mins of my life ... but im not changing it
     let mut my_area = area.clone();
-    my_area.width = (area.width as f32 * settings.message_width_ratio) as u16;
+    my_area.width = (area.width as f32 * settings.message_width_ratio + 0.5) as u16;
+    // let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
 
     // let mut new_area = area.clone();
     // new_area.width = area.width;
@@ -154,15 +294,16 @@ impl Message {
     //
     // let mut index = 0;
 
-    let result = &self.lines;
-    let vec_lines: Vec<String>;
+    // let result = &self.lines;
 
-    match result {
-      Some(x) => vec_lines = x.to_vec(),
-      None => {
-        panic!("AAAaaaHHHhhh!!!")
-      }
-    }
+    let vec_lines: Vec<String> = self.body.as_lines(my_area.width - 2).to_vec();
+
+    // match result {
+    //   Some(x) => vec_lines = x.to_vec(),
+    //   None => {
+    //     panic!("AAAaaaHHHhhh!!!")
+    //   }
+    // }
 
     // shrink the message to fit if it does not need mutliple lines
     if vec_lines.len() == 1 {
@@ -185,54 +326,59 @@ impl Message {
   }
 }
 
-impl Message {
-  // me after i find out this already exists in ratatui: -_-
-  //
-  fn split_into_lines(&mut self, term_width: u16) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-    let mut new_line = String::from("");
-
-    // collumn index
-    let mut coldex = 0;
-    // let availible_width = (term_width as f32 * settings.message_width_ratio + 0.5) as usize;
-    let availible_width = term_width as usize;
-
-    for yap in self.body.split(" ") {
-      let mut length = yap.len();
-
-      if coldex + yap.len() <= availible_width {
-        new_line.push_str(yap);
-        new_line.push_str(" ");
-        coldex += yap.len() + 1;
-      } else {
-        lines.push(new_line.clone().trim_end().to_string());
-
-        let mut index = 0;
-
-        while length >= availible_width {
-          lines.push(yap[index..index + availible_width].to_string());
-          length -= availible_width;
-          index += availible_width;
-        }
-
-        new_line = String::from(yap[index..].to_string());
-        coldex = new_line.len();
-
-        if new_line.len() > 0 {
-          new_line.push_str(" ");
-          coldex += 1;
-        }
-      }
-    }
-
-    lines.push(new_line.clone().trim_end().to_string());
-
-    lines
-  }
-}
+// impl Message {
+// me after i find out this already exists in ratatui: -_-
+//
+// fn split_into_lines(&mut self, term_width: u16) -> Vec<String> {
+//   let mut lines: Vec<String> = Vec::new();
+//   let mut new_line = String::from("");
+//
+//   // collumn index
+//   let mut coldex = 0;
+//   // let availible_width = (term_width as f32 * settings.message_width_ratio + 0.5) as usize;
+//   let availible_width = term_width as usize;
+//
+//   for yap in self.body.split(" ") {
+//     let mut length = yap.len();
+//
+//     if coldex + yap.len() <= availible_width {
+//       new_line.push_str(yap);
+//       new_line.push_str(" ");
+//       coldex += yap.len() + 1;
+//     } else {
+//       lines.push(new_line.clone().trim_end().to_string());
+//
+//       let mut index = 0;
+//
+//       while length >= availible_width {
+//         lines.push(yap[index..index + availible_width].to_string());
+//         length -= availible_width;
+//         index += availible_width;
+//       }
+//
+//       new_line = String::from(yap[index..].to_string());
+//       coldex = new_line.len();
+//
+//       if new_line.len() > 0 {
+//         new_line.push_str(" ");
+//         coldex += 1;
+//       }
+//     }
+//   }
+//
+//   lines.push(new_line.clone().trim_end().to_string());
+//
+//   lines
+// }
+// }
 
 impl Chat {
   fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
+    let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(3)]).split(area);
+
+    // kind of a sketchy shadow here but the layout[1] is used like once
+    let mut area = layout[0];
+
     let block = Block::bordered().border_set(border::THICK);
     // .title(title.centered())
     // .title_bottom(instructions.centered())
@@ -246,8 +392,7 @@ impl Chat {
     area.y += 1;
     // end shitty tmp padding
 
-    let message_width: u16 = (area.width as f32 * settings.message_width_ratio) as u16 - 2;
-    logger.log(format!("width: {}", message_width));
+    let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
 
     let mut index = 0;
     let mut y = self.location.offset * -1;
@@ -256,23 +401,23 @@ impl Chat {
       let message = &mut self.messages[index];
 
       // only here for testing; remove later; breaks the fun "cache" system
-      message.lines = Some(message.split_into_lines(message_width));
+      // message.lines = message.as_lines(message_width);
 
-      let result = &message.lines;
+      // let result = message.body.as_lines(mes);
 
-      match result {
-        Some(_x) => {}
-        None => {
-          message.lines = Some(message.split_into_lines(message_width));
-          let this_better_work = &message.lines;
-          match this_better_work {
-            Some(_x) => {}
-            None => panic!("AAAaaaHHHhhh!!!"),
-          }
-        }
-      }
+      // match result {
+      //   Some(_x) => {}
+      //   None => {
+      //     message.lines = Some(message.split_into_lines(message_width));
+      //     let this_better_work = &message.lines;
+      //     match this_better_work {
+      //       Some(_x) => {}
+      //       None => panic!("AAAaaaHHHhhh!!!"),
+      //     }
+      //   }
+      // }
 
-      let height = message.lines.as_ref().unwrap().len() as i16 + 2;
+      let height = message.body.as_lines(message_width).len() as i16 + 2;
 
       // let height = min(y + requested_height, area.height);
       let new_area = Rect::new(area.x, area.y + y as u16, area.width, height as u16);
@@ -282,6 +427,8 @@ impl Chat {
       index += 1;
       y += height;
     }
+
+    self.text_input.render(layout[1], buf, logger);
   }
 }
 
@@ -304,7 +451,7 @@ fn main() -> color_eyre::Result<()> {
 
     // Process updates as long as they return a non-None message
     while current_msg.is_some() {
-      current_msg = update(&mut model, current_msg.unwrap());
+      current_msg = update(&mut model, current_msg.unwrap(), logger);
     }
   }
 
@@ -340,7 +487,9 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
   )
   .split(frame.area());
 
-  model.content.render(layout[1], frame.buffer_mut(), settings, logger);
+  model
+    .current_chat()
+    .render(layout[1], frame.buffer_mut(), settings, logger);
 
   //
   // frame.render_widget(
@@ -359,43 +508,62 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
 ///
 /// We don't need to pass in a `model` to this function in this example
 /// but you might need it as your project evolves
-fn handle_event(_: &Model) -> color_eyre::Result<Option<Action>> {
+///
+/// (the project evolved (pokemon core))
+fn handle_event(model: &Model) -> color_eyre::Result<Option<Action>> {
   if event::poll(Duration::from_millis(250))? {
     if let Event::Key(key) = event::read()? {
       if key.kind == event::KeyEventKind::Press {
-        return Ok(handle_key(key));
+        return Ok(handle_key(key, model));
       }
     }
   }
   Ok(None)
 }
 
-fn handle_key(key: event::KeyEvent) -> Option<Action> {
-  match key.code {
-    KeyCode::Char('j') => Some(Action::Increment),
-    KeyCode::Char('k') => Some(Action::Decrement),
-    KeyCode::Char('q') => Some(Action::Quit),
-    _ => None,
+fn handle_key(key: event::KeyEvent, model: &Model) -> Option<Action> {
+  match model.mode {
+    Mode::Insert => match key.code {
+      KeyCode::Esc => Some(Action::SetMode(Mode::Normal)),
+      KeyCode::Char(char) => Some(Action::Type(char)),
+      // this will not get confusing trust
+      KeyCode::Backspace => Some(Action::Backspace),
+      _ => None,
+    },
+    Mode::Normal => match key.code {
+      KeyCode::Char('i') => Some(Action::SetMode(Mode::Insert)),
+      // KeyCode::Char('k') => Some(Action::Decrement),
+      KeyCode::Char('q') => Some(Action::Quit),
+      _ => None,
+    },
   }
 }
 
-fn update(model: &mut Model, msg: Action) -> Option<Action> {
+fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Action> {
   match msg {
-    Action::Increment => {
-      model.counter += 1;
-      if model.counter > 50 {
-        return Some(Action::Reset);
-      }
-    }
-    Action::Decrement => {
-      model.counter -= 1;
-      if model.counter < -50 {
-        return Some(Action::Reset);
-      }
-    }
+    // Action::Increment => {
+    //   model.counter += 1;
+    //   if model.counter > 50 {
+    //     return Some(Action::Reset);
+    //   }
+    // }
+    // Action::Decrement => {
+    //   model.counter -= 1;
+    //   if model.counter < -50 {
+    //     return Some(Action::Reset);
+    //   }
+    // }
     Action::Reset => model.counter = 0,
+    Action::Type(char) => {
+      model.current_chat().text_input.insert_char(char, logger);
+    }
+    Action::Backspace => model.current_chat().text_input.delete_char(),
+
+    Action::SetMode(new_mode) => model.mode = new_mode,
+
     Action::Quit => {
       // You can handle cleanup and exit here
+      // - im ok thanks tho
       model.running_state = RunningState::OhShit;
     }
   };
