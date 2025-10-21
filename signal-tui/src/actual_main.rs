@@ -1,8 +1,7 @@
+mod logger;
 #[cfg(test)]
 mod tests;
 
-use std::fs::File;
-use std::io::Write;
 use std::{time::Duration, vec};
 
 use ratatui::layout::{Constraint, Direction, Layout};
@@ -16,7 +15,8 @@ use ratatui::{
   text::Line,
   widgets::{Block, Paragraph, Widget},
 };
-use std::fs::OpenOptions;
+
+use crate::logger::Logger;
 
 #[derive(Debug, Default)]
 struct Model {
@@ -39,10 +39,6 @@ pub enum Mode {
   Normal,
   Insert,
 }
-
-// impl PartialEq for Mode {
-//   fn eq(&self, other: &Self) -> bool {}
-// }
 
 #[derive(PartialEq)]
 enum Action {
@@ -211,39 +207,39 @@ impl Settings {
   }
 }
 
-pub struct Logger {
-  file: File,
-}
-
-impl Logger {
-  fn init(file_name: &str) -> Self {
-    let mut file = OpenOptions::new()
-      .write(true)
-      .truncate(true)
-      .create(true)
-      .open(file_name)
-      .expect("am i goated?");
-
-    let result = writeln!(file, "=== START OF LOG === ");
-
-    result.expect("am i goated?");
-
-    file = OpenOptions::new()
-      .append(true)
-      .create(true)
-      .open(file_name)
-      .expect("kaboom");
-
-    let logger = Logger { file: file };
-
-    logger
-  }
-
-  fn log(&mut self, log: String) {
-    // no clue why this works
-    writeln!(self.file, "{}", log).expect("kaboom");
-  }
-}
+// pub struct Logger {
+//   file: File,
+// }
+//
+// impl Logger {
+//   fn init(file_name: &str) -> Self {
+//     let mut file = OpenOptions::new()
+//       .write(true)
+//       .truncate(true)
+//       .create(true)
+//       .open(file_name)
+//       .expect("am i goated?");
+//
+//     let result = writeln!(file, "=== START OF LOG === ");
+//
+//     result.expect("am i goated?");
+//
+//     file = OpenOptions::new()
+//       .append(true)
+//       .create(true)
+//       .open(file_name)
+//       .expect("kaboom");
+//
+//     let logger = Logger { file: file };
+//
+//     logger
+//   }
+//
+//   fn log(&mut self, log: String) {
+//     // no clue why this works
+//     writeln!(self.file, "{}", log).expect("kaboom");
+//   }
+// }
 
 impl Model {
   fn init() -> Self {
@@ -508,9 +504,7 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
   )
   .split(frame.area());
 
-  model
-    .current_chat()
-    .render(layout[1], frame.buffer_mut(), settings, logger);
+  model.current_chat().render(layout[1], frame.buffer_mut(), settings, logger);
 
   //
   // frame.render_widget(
