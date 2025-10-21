@@ -20,7 +20,6 @@ use std::fs::OpenOptions;
 
 #[derive(Debug, Default)]
 struct Model {
-  counter: i32,
   running_state: RunningState,
   mode: Mode,
   chats: Vec<Chat>,
@@ -47,8 +46,6 @@ pub enum Mode {
 
 #[derive(PartialEq)]
 enum Action {
-  Reset,
-
   Type(char),
   Backspace,
 
@@ -92,7 +89,10 @@ impl MulitLineString {
         new_line.push_str(" ");
         coldex += yap.len() + 1;
       } else {
-        lines.push(new_line.clone().trim_end().to_string());
+        // INCOMPLETE LOGIC!!! should probably trim the start of the string
+        if new_line != "" {
+          lines.push(new_line.clone().trim_end().to_string());
+        }
 
         let mut index = 0;
 
@@ -114,9 +114,9 @@ impl MulitLineString {
 
     lines.push(new_line.clone().trim_end().to_string());
 
-    self.cached_length = lines.len() as u16;
-    self.cached_lines = lines;
+    self.cached_length = self.body.len() as u16;
     self.cached_width = width;
+    self.cached_lines = lines;
   }
 
   // this is the one you call
@@ -157,7 +157,7 @@ pub struct TextInput {
 }
 
 impl TextInput {
-  fn render(&mut self, area: Rect, buf: &mut Buffer, logger: &mut Logger) {
+  fn render(&mut self, area: Rect, buf: &mut Buffer, _logger: &mut Logger) {
     let block = Block::bordered().border_set(border::THICK);
 
     // shitty temp padding for the border
@@ -168,7 +168,7 @@ impl TextInput {
     // area.y += 1;
 
     let vec_lines = self.body.as_lines(area.width - 2).to_vec();
-    logger.log(format!("this is the first line: {}", self.cursor_index));
+    // logger.log(format!("this is the first line: {}", self.cursor_index));
     let mut lines: Vec<Line> = Vec::new();
     for yap in vec_lines {
       lines.push(Line::from(yap));
@@ -186,6 +186,10 @@ impl TextInput {
     logger.log(format!("after add: {}", self.body.body));
   }
   fn delete_char(&mut self) {
+    if self.cursor_index == 0 {
+      return;
+    }
+
     self.cursor_index -= 1;
     self.body.body.remove(self.cursor_index);
   }
@@ -279,7 +283,7 @@ impl Model {
 }
 
 impl Message {
-  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
+  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, _logger: &mut Logger) {
     let block = Block::bordered().border_set(border::THICK);
 
     // this ugly shadow cost me a good 15 mins of my life ... but im not changing it
@@ -372,12 +376,29 @@ impl Message {
 // }
 // }
 
+fn format_vec(vec: &Vec<String>) -> String {
+  let mut output = String::from("[");
+
+  for thing in vec {
+    output.push_str(thing);
+    output.push_str(", ");
+  }
+
+  output.push_str("]");
+
+  return output;
+}
+
 impl Chat {
   fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
-    let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(3)]).split(area);
+    let input_lines = self.text_input.body.as_lines(area.width - 2).len() as u16;
+    logger.log("this is our input: ".to_string());
+    logger.log(format_vec(self.text_input.body.as_lines(area.width - 2)));
+
+    let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(input_lines + 2)]).split(area);
 
     // kind of a sketchy shadow here but the layout[1] is used like once
-    let mut area = layout[0];
+    let area = layout[0];
 
     let block = Block::bordered().border_set(border::THICK);
     // .title(title.centered())
@@ -553,7 +574,6 @@ fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Action>
     //     return Some(Action::Reset);
     //   }
     // }
-    Action::Reset => model.counter = 0,
     Action::Type(char) => {
       model.current_chat().text_input.insert_char(char, logger);
     }
