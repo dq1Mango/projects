@@ -173,13 +173,10 @@ impl TextInput {
     Paragraph::new(lines).block(block).render(area, buf);
   }
 
-  fn insert_char(&mut self, char: char, logger: &mut Logger) {
-    logger.log(format!("adding this: {}", char));
-    logger.log(format!("before add: {}", self.body.body));
+  fn insert_char(&mut self, char: char, _logger: &mut Logger) {
     // some disgusting object-oriented blashphemy going on here
     self.body.body.insert(self.cursor_index, char);
     self.cursor_index += 1;
-    logger.log(format!("after add: {}", self.body.body));
   }
   fn delete_char(&mut self) {
     if self.cursor_index == 0 {
@@ -388,8 +385,8 @@ fn format_vec(vec: &Vec<String>) -> String {
 impl Chat {
   fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
     let input_lines = self.text_input.body.as_lines(area.width - 2).len() as u16;
-    logger.log("this is our input: ".to_string());
-    logger.log(format_vec(self.text_input.body.as_lines(area.width - 2)));
+    Logger::log("this is our input: ".to_string());
+    Logger::log(format_vec(self.text_input.body.as_lines(area.width - 2)));
 
     let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(input_lines + 2)]).split(area);
 
@@ -457,7 +454,7 @@ fn main() -> color_eyre::Result<()> {
 
   // regular lumber jack
   let logger = &mut Logger::init("log.txt");
-  logger.log("testing".to_string());
+  Logger::log("testing".to_string());
 
   while model.running_state != RunningState::OhShit {
     // Render the current view
