@@ -1,15 +1,17 @@
 mod logger;
+mod multi_line_string;
 #[cfg(test)]
 mod tests;
+
 mod update;
 
 use std::{time::Duration, vec};
 
-use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::{
   Frame,
   buffer::Buffer,
   layout::Rect,
+  layout::{Constraint, Direction, Layout},
   style::Stylize,
   symbols::border,
   text::Line,
@@ -17,7 +19,8 @@ use ratatui::{
 };
 
 use crate::logger::Logger;
-use crate::update::{handle_event, update};
+use crate::multi_line_string::MultiLineString;
+use crate::update::*;
 
 #[derive(Debug, Default)]
 pub struct Model {
@@ -42,84 +45,8 @@ pub enum Mode {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct MulitLineString {
-  body: String,
-  cached_lines: Vec<String>,
-  cached_width: u16,
-  cached_length: u16,
-}
-
-impl MulitLineString {
-  fn init(str: &str) -> Self {
-    Self {
-      body: str.to_string(),
-      cached_lines: vec!["".to_string()],
-      cached_width: 0,
-      cached_length: 0,
-    }
-  }
-
-  fn update_cache(&mut self, width: u16) {
-    let mut lines: Vec<String> = Vec::new();
-    let mut new_line = String::from("");
-
-    // collumn index
-    let mut coldex = 0;
-    // let availible_width = (term_width as f32 * settings.message_width_ratio + 0.5) as usize;
-    let availible_width = width as usize;
-
-    for yap in self.body.split(" ") {
-      let mut length = yap.len();
-
-      if coldex + yap.len() <= availible_width {
-        new_line.push_str(yap);
-        new_line.push_str(" ");
-        coldex += yap.len() + 1;
-      } else {
-        // INCOMPLETE LOGIC!!! should probably trim the start of the string
-        if new_line != "" {
-          lines.push(new_line.clone().trim_end().to_string());
-        }
-
-        let mut index = 0;
-
-        while length >= availible_width {
-          lines.push(yap[index..index + availible_width].to_string());
-          length -= availible_width;
-          index += availible_width;
-        }
-
-        new_line = String::from(yap[index..].to_string());
-        coldex = new_line.len();
-
-        if new_line.len() > 0 {
-          new_line.push_str(" ");
-          coldex += 1;
-        }
-      }
-    }
-
-    lines.push(new_line.clone().trim_end().to_string());
-
-    self.cached_length = self.body.len() as u16;
-    self.cached_width = width;
-    self.cached_lines = lines;
-  }
-
-  // this is the one you call
-  fn as_lines(&mut self, width: u16) -> &Vec<String> {
-    // criteria for refreshing the cache
-    if width != self.cached_width || self.body.len() as u16 != self.cached_length {
-      self.update_cache(width);
-    }
-
-    return &self.cached_lines;
-  }
-}
-
-#[derive(Debug, Default, Clone)]
 pub struct Message {
-  body: MulitLineString,
+  body: MultiLineString,
   sender: String,
 }
 
@@ -139,7 +66,7 @@ pub struct Chat {
 
 #[derive(Debug, Default)]
 pub struct TextInput {
-  body: MulitLineString,
+  body: MultiLineString,
   cursor_index: usize,
 }
 
@@ -199,13 +126,13 @@ impl Model {
   fn init() -> Self {
     let messages = vec![
       Message {
-        body: MulitLineString::init(
+        body: MultiLineString::init(
           "first message lets make this message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
         sender: String::from("not me"),
       },
       Message {
-        body: MulitLineString::init("second message"),
+        body: MultiLineString::init("second message"),
         sender: String::from("me"),
       },
     ];
