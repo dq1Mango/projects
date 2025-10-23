@@ -1,10 +1,10 @@
 use chrono::Local;
-use std::fs::File;
+// use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
 
 pub struct Logger {
-  file: File,
+  // file: File,
 }
 
 static FILE_NAME: &str = "log.txt";
@@ -18,13 +18,17 @@ impl Logger {
       .open(file_name)
       .expect("am i goated?");
 
-    let result = writeln!(file, "=== START OF LOG === ");
+    let result = writeln!(file, "=== START OF LOG ===\n");
 
     result.expect("am i goated?");
 
-    file = OpenOptions::new().append(true).create(true).open(file_name).expect("kaboom");
+    file = OpenOptions::new()
+      .append(true)
+      .create(true)
+      .open(file_name)
+      .expect("kaboom");
 
-    let logger = Logger { file: file };
+    let logger = Logger {};
 
     logger
   }
@@ -36,7 +40,7 @@ impl Logger {
   //   writeln!(self.file, "{}", log).expect("kaboom");
   // }
   //
-  pub fn clear() {
+  pub fn _clear() {
     let mut file = OpenOptions::new()
       .write(true)
       .truncate(true)
@@ -48,9 +52,13 @@ impl Logger {
   }
 
   pub fn log(log: String) {
-    let mut file = OpenOptions::new().append(true).create(true).open(FILE_NAME).expect("kaboom");
+    let mut file = OpenOptions::new()
+      .append(true)
+      .create(true)
+      .open(FILE_NAME)
+      .expect("kaboom");
     let date_time = Local::now();
-    let formatted = format!("{}", date_time.format("%d/%m/%Y %H:%M"));
+    let formatted = format!("{}", date_time.format("%H:%M:%S"));
     writeln!(file, "{}: {}", formatted, log).expect("kaboom");
   }
 }

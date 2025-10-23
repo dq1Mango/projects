@@ -10,8 +10,7 @@ use std::{time::Duration, vec};
 use ratatui::{
   Frame,
   buffer::Buffer,
-  layout::Rect,
-  layout::{Constraint, Direction, Layout},
+  layout::{Constraint, Direction, Layout, Position, Rect},
   style::Stylize,
   symbols::border,
   text::Line,
@@ -67,43 +66,8 @@ pub struct Chat {
 #[derive(Debug, Default)]
 pub struct TextInput {
   body: MultiLineString,
-  cursor_index: usize,
-}
-
-impl TextInput {
-  fn render(&mut self, area: Rect, buf: &mut Buffer, _logger: &mut Logger) {
-    let block = Block::bordered().border_set(border::THICK);
-
-    // shitty temp padding for the border
-    // let mut area = area;
-    // area.x += 1;
-    // area.width -= 2;
-    // area.height -= 2;
-    // area.y += 1;
-
-    let vec_lines = self.body.as_lines(area.width - 2).to_vec();
-    // logger.log(format!("this is the first line: {}", self.cursor_index));
-    let mut lines: Vec<Line> = Vec::new();
-    for yap in vec_lines {
-      lines.push(Line::from(yap));
-    }
-
-    Paragraph::new(lines).block(block).render(area, buf);
-  }
-
-  fn insert_char(&mut self, char: char, _logger: &mut Logger) {
-    // some disgusting object-oriented blashphemy going on here
-    self.body.body.insert(self.cursor_index, char);
-    self.cursor_index += 1;
-  }
-  fn delete_char(&mut self) {
-    if self.cursor_index == 0 {
-      return;
-    }
-
-    self.cursor_index -= 1;
-    self.body.body.remove(self.cursor_index);
-  }
+  cursor_index: u16,
+  cursor_position: Position,
 }
 
 pub struct Settings {
@@ -156,6 +120,61 @@ impl Model {
   // not really needed but it staves off the need for explicit liiftimes a little longer
   fn current_chat(&mut self) -> &mut Chat {
     &mut self.chats[self.chat_index]
+  }
+}
+
+impl TextInput {
+  fn render(&mut self, area: Rect, buf: &mut Buffer, _logger: &mut Logger) {
+    let block = Block::bordered().border_set(border::THICK);
+
+    // shitty temp padding for the border
+    // let mut area = area;
+    // area.x += 1;
+    // area.width -= 2;
+    // area.height -= 2;
+    // area.y += 1;
+
+    let vec_lines = self.body.as_lines(area.width - 2).to_vec();
+    // logger.log(format!("this is the first line: {}", self.cursor_index));
+    let mut lines: Vec<Line> = Vec::new();
+    for yap in vec_lines {
+      lines.push(Line::from(yap));
+    }
+
+    Paragraph::new(lines).block(block).render(area, buf);
+
+    self.cursor_position = self.calc_cursor_position(area)
+  }
+
+  fn calc_cursor_position(&mut self, area: Rect) -> Position {
+    let lines = self.body.as_lines(area.width - 2).len() as u16;
+
+    // let length = self.body.body.len() as u16;
+
+    let mut y = area.y + 1;
+    if lines != 0 {
+      y += self.cursor_index / (lines + 1) as u16
+    }
+
+    let x = area.x + 1 + self.cursor_index / area.width;
+
+    // mad ugly calculation, smthns gotta change
+    Position { x: x, y: y }
+  }
+
+  fn insert_char(&mut self, char: char, _logger: &mut Logger) {
+    // some disgusting object-oriented blashphemy going on here
+    self.body.body.insert(self.cursor_index as usize, char);
+    self.cursor_index += 1;
+  }
+
+  fn delete_char(&mut self) {
+    if self.cursor_index == 0 {
+      return;
+    }
+
+    self.cursor_index -= 1;
+    self.body.body.remove(self.cursor_index as usize);
   }
 }
 
@@ -339,7 +358,11 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
   )
   .split(frame.area());
 
-  model.current_chat().render(layout[1], frame.buffer_mut(), settings, logger);
+  model
+    .current_chat()
+    .render(layout[1], frame.buffer_mut(), settings, logger);
+
+  frame.set_cursor_position(model.current_chat().text_input.cursor_position);
 
   //
   // frame.render_widget(
