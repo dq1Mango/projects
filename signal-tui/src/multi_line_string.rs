@@ -26,6 +26,7 @@ impl MultiLineString {
     // let availible_width = (term_width as f32 * settings.message_width_ratio + 0.5) as usize;
     let availible_width = width as usize;
 
+    // this .split() is a little sketchy but it works mostly
     for yap in self.body.split(" ") {
       let mut length = yap.len();
 
@@ -36,7 +37,7 @@ impl MultiLineString {
       } else {
         // INCOMPLETE LOGIC!!! should probably trim the start of the string
         if new_line != "" {
-          lines.push(new_line.clone().trim_end().to_string());
+          lines.push(new_line.clone());
         }
 
         let mut index = 0;
@@ -57,7 +58,9 @@ impl MultiLineString {
       }
     }
 
-    lines.push(new_line.clone().trim_end().to_string());
+    // remove the trailing ' '
+    new_line.pop();
+    lines.push(new_line);
 
     self.cached_length = self.body.len() as u16;
     self.cached_width = width;

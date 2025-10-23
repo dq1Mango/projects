@@ -134,7 +134,9 @@ impl TextInput {
     // area.height -= 2;
     // area.y += 1;
 
-    let vec_lines = self.body.as_lines(area.width - 2).to_vec();
+    // minus 3 b/c you cant have the cursor on the border and i cant be bothered to add another
+    // edge case
+    let vec_lines = self.body.as_lines(area.width - 3).to_vec();
     // logger.log(format!("this is the first line: {}", self.cursor_index));
     let mut lines: Vec<Line> = Vec::new();
     for yap in vec_lines {
@@ -147,19 +149,35 @@ impl TextInput {
   }
 
   fn calc_cursor_position(&mut self, area: Rect) -> Position {
-    let lines = self.body.as_lines(area.width - 2).len() as u16;
+    // gotta pad the border (still havent found a better way of doing this)
+    let mut pos = Position {
+      x: area.x + 1,
+      y: area.y + 1,
+    };
+    // mad ugly calculations, smthns gotta change
+    let lines = self.body.as_lines(area.width - 3);
+    // let body = self.body.body.char_indices();
+
+    let (mut index, mut row, mut col) = (0, 0, 0);
+
+    while index + lines[row].len() < self.cursor_index as usize {
+      index += lines[row].len();
+      pos.y += 1;
+      row += 1;
+    }
+
+    pos.x += self.cursor_index - index as u16;
 
     // let length = self.body.body.len() as u16;
 
     let mut y = area.y + 1;
-    if lines != 0 {
-      y += self.cursor_index / (lines + 1) as u16
-    }
+    // if lines != 0 {
+    //   y += self.cursor_index / (lines + 1) as u16
+    // }
 
     let x = area.x + 1 + self.cursor_index / area.width;
 
-    // mad ugly calculation, smthns gotta change
-    Position { x: x, y: y }
+    pos
   }
 
   fn insert_char(&mut self, char: char, _logger: &mut Logger) {

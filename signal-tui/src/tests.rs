@@ -1,5 +1,7 @@
 use crate::Message;
-use crate::MulitLineString;
+use crate::MultiLineString;
+
+// mod multi_line_string;
 
 #[test]
 fn test_tests() {
@@ -27,16 +29,16 @@ fn test_split_into_lines() {
   let width = 5;
 
   let mut message = Message::default();
-  message.body = MulitLineString::init("this is myy message");
+  message.body = MultiLineString::init("this is myy message");
 
   let output = message.body.as_lines(width);
 
   for line in output {
-    println!("{}", line);
+    println!("{}| end", line);
   }
 
   let mut expected: Vec<String> = Vec::new();
-  for line in vec!["this", "is", "myy", "messa", "ge"] {
+  for line in vec!["this ", "is ", "myy ", "messa", "ge"] {
     expected.push(line.to_string());
   }
 
@@ -46,7 +48,7 @@ fn test_split_into_lines() {
 #[test]
 fn i_wanna_see() {
   let mut message = Message::default();
-  message.body = MulitLineString::init(
+  message.body = MultiLineString::init(
     "first message lets make this message super looong jjafkldjaflk it was not long enough last time time to yap fr",
   );
   let width = 68;
