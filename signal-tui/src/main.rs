@@ -91,7 +91,7 @@ impl Model {
     let messages = vec![
       Message {
         body: MultiLineString::init(
-          "first message lets make this message super looong jjafkldjaflk it was not long enough last time time to yap fr",
+          "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
         sender: String::from("not me"),
       },
@@ -136,7 +136,7 @@ impl TextInput {
 
     // minus 3 b/c you cant have the cursor on the border and i cant be bothered to add another
     // edge case
-    let vec_lines = self.body.as_lines(area.width - 3).to_vec();
+    let vec_lines = self.body.as_trimmed_lines(area.width - 3);
     // logger.log(format!("this is the first line: {}", self.cursor_index));
     let mut lines: Vec<Line> = Vec::new();
     for yap in vec_lines {
@@ -158,24 +158,15 @@ impl TextInput {
     let lines = self.body.as_lines(area.width - 3);
     // let body = self.body.body.char_indices();
 
-    let (mut index, mut row, mut col) = (0, 0, 0);
+    let (mut index, mut row) = (0, 0);
 
-    while index + lines[row].len() < self.cursor_index as usize {
-      index += lines[row].len();
+    while (index + lines[row].len() as u16) < self.cursor_index {
+      index += lines[row].len() as u16;
       pos.y += 1;
       row += 1;
     }
 
-    pos.x += self.cursor_index - index as u16;
-
-    // let length = self.body.body.len() as u16;
-
-    let mut y = area.y + 1;
-    // if lines != 0 {
-    //   y += self.cursor_index / (lines + 1) as u16
-    // }
-
-    let x = area.x + 1 + self.cursor_index / area.width;
+    pos.x += (self.cursor_index - index).clamp(0, area.width - 3);
 
     pos
   }
@@ -259,9 +250,9 @@ fn format_vec(vec: &Vec<String>) -> String {
 
 impl Chat {
   fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
-    let input_lines = self.text_input.body.as_lines(area.width - 2).len() as u16;
-    Logger::log("this is our input: ".to_string());
-    Logger::log(format_vec(self.text_input.body.as_lines(area.width - 2)));
+    let input_lines = self.text_input.body.rows(area.width - 3);
+    // Logger::log("this is our input: ".to_string());
+    // Logger::log(format_vec(self.text_input.body.as_lines(area.width - 2)));
 
     let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(input_lines + 2)]).split(area);
 
@@ -306,7 +297,7 @@ impl Chat {
       //   }
       // }
 
-      let height = message.body.as_lines(message_width).len() as i16 + 2;
+      let height = message.body.rows(message_width) + 2;
 
       // let height = min(y + requested_height, area.height);
       let new_area = Rect::new(area.x, area.y + y as u16, area.width, height as u16);
@@ -314,7 +305,7 @@ impl Chat {
       message.render(new_area, buf, settings, logger);
 
       index += 1;
-      y += height;
+      y += height as i16;
     }
 
     self.text_input.render(layout[1], buf, logger);

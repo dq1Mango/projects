@@ -34,11 +34,26 @@ fn test_split_into_lines() {
   let output = message.body.as_lines(width);
 
   for line in output {
-    println!("{}| end", line);
+    println!("{}|end", line);
   }
 
   let mut expected: Vec<String> = Vec::new();
   for line in vec!["this ", "is ", "myy ", "messa", "ge"] {
+    expected.push(line.to_string());
+  }
+
+  assert!(vecs_equal(output.to_vec(), expected));
+
+  message.body = MultiLineString::init("we       have space and");
+
+  let output = message.body.as_trimmed_lines(width);
+
+  for line in &output {
+    println!("{}|end", line);
+  }
+
+  let mut expected: Vec<String> = Vec::new();
+  for line in vec!["we", "have", "space", "and"] {
     expected.push(line.to_string());
   }
 

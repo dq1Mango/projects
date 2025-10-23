@@ -30,12 +30,12 @@ impl MultiLineString {
     for yap in self.body.split(" ") {
       let mut length = yap.len();
 
-      if coldex + yap.len() <= availible_width {
+      if coldex + yap.len() <= availible_width || yap == "" {
         new_line.push_str(yap);
         new_line.push_str(" ");
         coldex += yap.len() + 1;
       } else {
-        // INCOMPLETE LOGIC!!! should probably trim the start of the string
+        // INCOMPLETE LOGIC!!!
         if new_line != "" {
           lines.push(new_line.clone());
         }
@@ -75,5 +75,24 @@ impl MultiLineString {
     }
 
     return &self.cached_lines;
+  }
+
+  pub fn as_owned_lines(&mut self, width: u16) -> Vec<String> {
+    self.as_lines(width).clone()
+  }
+
+  pub fn as_trimmed_lines(&mut self, width: u16) -> Vec<String> {
+    let untrimmed = self.as_lines(width);
+
+    let mut trimmed: Vec<String> = vec![];
+    for line in untrimmed {
+      trimmed.push(line.trim_end().to_string());
+    }
+
+    trimmed
+  }
+
+  pub fn rows(&mut self, width: u16) -> u16 {
+    self.as_lines(width).len() as u16
   }
 }
