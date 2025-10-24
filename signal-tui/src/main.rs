@@ -5,8 +5,10 @@ mod tests;
 
 mod update;
 
+use core::fmt;
 use std::{time::Duration, vec};
 
+use color_eyre::owo_colors::OwoColorize;
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -14,15 +16,15 @@ use ratatui::{
   style::Stylize,
   symbols::border,
   text::Line,
-  widgets::{Block, Paragraph, Widget},
+  widgets::{Block, Paragraph, StatefulWidget, Widget},
 };
-use ratatui_image::Image;
+use ratatui_image::{Image, Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
 use crate::multi_line_string::MultiLineString;
 use crate::update::*;
 
-#[derive(Debug, Default)]
+// #[derive(Debug, Default)]
 pub struct Model {
   running_state: RunningState,
   mode: Mode,
@@ -56,10 +58,18 @@ pub struct Location {
   offset: i16,
 }
 
-#[derive(Debug, Default)]
+pub struct MyImageWrapper(StatefulProtocol);
+
+impl fmt::Debug for MyImageWrapper {
+  fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    Ok(())
+  }
+}
+
 pub struct Contact {
-  name: String,
+  _name: String,
   nick_name: String,
+  pfp: StatefulProtocol,
   chat: Chat,
   // icon: Image,
 }
@@ -120,16 +130,34 @@ impl Model {
 
     // let chats: Vec<Chat> = vec![chat];
 
+    let picker = Picker::from_query_stdio().expect("kaboom");
+
+    // Load an image with the image crate.
+    let dyn_img = image::ImageReader::open("./assets/ferris_the_wheel.jpg")
+      .unwrap()
+      .decode()
+      .unwrap();
+
+    // Create the Protocol which will be used by the widget.
+    let image = picker.new_resize_protocol(dyn_img);
+
     let contacts = vec![Contact {
       nick_name: String::from("sarahhhh"),
-      name: String::from("sarah"),
+      _name: String::from("sarah"),
       chat: chat,
+      pfp: image,
     }];
 
-    let mut model = Model::default();
-    model.contacts = contacts;
-    // model.chats = chats;
-    model.chat_index = 0;
+    let model = Model {
+      chat_index: 0,
+      contacts: contacts,
+      running_state: RunningState::Running,
+      mode: Mode::Normal,
+    };
+    // let mut model = Model::default();
+    // model.contacts = contacts;
+    // // model.chats = chats;
+    // model.chat_index = 0;
     model
   }
 
@@ -345,7 +373,7 @@ impl MyStringUtils for String {
 }
 
 impl Contact {
-  fn render(&self, area: Rect, buf: &mut Buffer) {
+  fn render(&mut self, area: Rect, buf: &mut Buffer) {
     Block::bordered().border_set(border::THICK).render(area, buf);
 
     let mut area = area;
@@ -356,6 +384,14 @@ impl Contact {
 
     let layout = Layout::horizontal([Constraint::Length(8), Constraint::Min(15), Constraint::Length(3)]).split(area);
 
+    // let image = StatefulImage::default().resize(Resize::Crop(None));
+    // let mut pfp = match &self.pfp {
+    //   Some(x) => x.0,
+    //   None => panic!("Aaaaaahhhhh"),
+    // };
+    // // StatefulImage::render(image, layout[0], buf, &mut pfp);
+    // let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
+    StatefulImage::new().render(area, buf, &mut self.pfp);
     let message_text: Vec<String> = self.last_message().body.fit(layout[1].width, layout[1].height - 1);
 
     let mut innner_lines: Vec<Line> = vec![Line::from(self.nick_name.shrink(layout[1].width).bold())];
