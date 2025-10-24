@@ -1,5 +1,12 @@
+use std::ops::Sub;
+
+use chrono::Duration;
+use chrono::TimeDelta;
+use chrono::Utc;
+
 use crate::Message;
 use crate::MultiLineString;
+use crate::format_duration;
 
 // mod multi_line_string;
 
@@ -76,4 +83,25 @@ fn i_wanna_see() {
 
   // assert!(false);
   assert!(true);
+}
+
+#[test]
+fn im_so_tired() {
+  let two_hours = TimeDelta::hours(2);
+  let mut two_hours_ago = Utc::now();
+  two_hours_ago = two_hours_ago.checked_sub_signed(two_hours).unwrap();
+
+  let formatted = format_duration(&two_hours_ago);
+
+  println!("{}", formatted);
+
+  assert_eq!(formatted, "2h");
+
+  let now = Utc::now();
+
+  let formatted = format_duration(&now);
+
+  println!("{}", formatted);
+
+  assert_eq!(formatted, "Now")
 }

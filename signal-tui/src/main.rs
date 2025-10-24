@@ -8,7 +8,7 @@ mod update;
 use core::fmt;
 use std::{time::Duration, vec};
 
-use color_eyre::owo_colors::OwoColorize;
+use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -50,6 +50,7 @@ pub enum Mode {
 pub struct Message {
   body: MultiLineString,
   sender: String,
+  time_stamp: DateTime<Utc>,
 }
 
 #[derive(Default, Debug)]
@@ -113,10 +114,12 @@ impl Model {
           "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
         sender: String::from("not me"),
+        time_stamp: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
       },
       Message {
         body: MultiLineString::init("second message"),
         sender: String::from("me"),
+        time_stamp: Utc::now(),
       },
     ];
 
@@ -142,8 +145,8 @@ impl Model {
     let image = picker.new_resize_protocol(dyn_img);
 
     let contacts = vec![Contact {
-      nick_name: String::from("sarahhhh"),
-      _name: String::from("sarah"),
+      nick_name: String::from("nickname"),
+      _name: String::from("name"),
       chat: chat,
       pfp: image,
     }];
@@ -372,6 +375,37 @@ impl MyStringUtils for String {
   }
 }
 
+fn format_duration(time: &chrono::DateTime<Utc>) -> String {
+  let duration = Utc::now().signed_duration_since(time);
+
+  if duration.num_minutes() < 1 {
+    return "Now".to_string();
+  } else if duration.num_hours() < 1 {
+    let mut temp = duration.num_minutes().to_string();
+    temp.push_str("m");
+    return temp;
+  } else if duration.num_days() < 1 {
+    let mut temp = duration.num_hours().to_string();
+    temp.push_str("h");
+    return temp;
+  } else {
+    return time.format("%M %D").to_string();
+  }
+
+  // let (num, chr): (i64, &str) = match duration.num_seconds() {
+  //   x @ ..59 => (x, "s"),
+  //   x @ 60..3659 => (x / 60, "m"),
+  //   x @  ..Duration::day(1) => (x, "s"),
+  //   x @ ..59 => (x, "s"),
+  //   x @ ..59 => (x, "s"),
+  //   x @ ..59 => (x, "s"),
+  // };
+
+  // let mut result = num.to_string();
+  // result.push_str(chr);
+  // result
+}
+
 impl Contact {
   fn render(&mut self, area: Rect, buf: &mut Buffer) {
     Block::bordered().border_set(border::THICK).render(area, buf);
@@ -382,7 +416,7 @@ impl Contact {
     area.height -= 2;
     area.y += 1;
 
-    let layout = Layout::horizontal([Constraint::Length(8), Constraint::Min(15), Constraint::Length(3)]).split(area);
+    let layout = Layout::horizontal([Constraint::Length(7), Constraint::Min(15), Constraint::Length(6)]).split(area);
 
     // let image = StatefulImage::default().resize(Resize::Crop(None));
     // let mut pfp = match &self.pfp {
@@ -401,6 +435,9 @@ impl Contact {
     }
 
     Paragraph::new(innner_lines).render(layout[1], buf);
+
+    let time = format_duration(&self.chat.messages[1].time_stamp);
+    Paragraph::new(time).render(layout[2], buf);
   }
 
   fn last_message(&self) -> &Message {
@@ -484,9 +521,7 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
     index += 1;
   }
 
-  model
-    .current_chat()
-    .render(layout[1], frame.buffer_mut(), settings, logger);
+  model.current_chat().render(layout[1], frame.buffer_mut(), settings, logger);
 
   frame.set_cursor_position(model.current_chat().text_input.cursor_position);
 
