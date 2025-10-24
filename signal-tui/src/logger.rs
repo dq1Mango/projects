@@ -22,11 +22,11 @@ impl Logger {
 
     result.expect("am i goated?");
 
-    file = OpenOptions::new()
-      .append(true)
-      .create(true)
-      .open(file_name)
-      .expect("kaboom");
+    // file = OpenOptions::new()
+    //   .append(true)
+    //   .create(true)
+    //   .open(file_name)
+    //   .expect("kaboom");
 
     let logger = Logger {};
 

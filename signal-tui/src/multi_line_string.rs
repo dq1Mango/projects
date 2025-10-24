@@ -1,3 +1,7 @@
+use std::cmp::min;
+
+use crate::MyStringUtils;
+
 #[derive(Debug, Default, Clone)]
 pub struct MultiLineString {
   pub body: String,
@@ -16,8 +20,7 @@ impl MultiLineString {
     }
   }
 
-  // this one isnt public cuz smthn smthn object oriented yappery
-  fn update_cache(&mut self, width: u16) {
+  fn calc_lines(&self, width: u16) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut new_line = String::from("");
 
@@ -61,10 +64,14 @@ impl MultiLineString {
     // remove the trailing ' '
     new_line.pop();
     lines.push(new_line);
+    lines
+  }
 
+  // this one isnt public cuz smthn smthn object oriented yappery
+  fn update_cache(&mut self, width: u16) {
+    self.cached_lines = self.calc_lines(width);
     self.cached_length = self.body.len() as u16;
     self.cached_width = width;
-    self.cached_lines = lines;
   }
 
   // this is the one you call
@@ -77,22 +84,38 @@ impl MultiLineString {
     return &self.cached_lines;
   }
 
-  pub fn as_owned_lines(&mut self, width: u16) -> Vec<String> {
+  pub fn _as_owned_lines(&mut self, width: u16) -> Vec<String> {
     self.as_lines(width).clone()
   }
 
   pub fn as_trimmed_lines(&mut self, width: u16) -> Vec<String> {
     let untrimmed = self.as_lines(width);
-
-    let mut trimmed: Vec<String> = vec![];
-    for line in untrimmed {
-      trimmed.push(line.trim_end().to_string());
-    }
-
-    trimmed
+    trim_vec(untrimmed.to_vec())
   }
 
   pub fn rows(&mut self, width: u16) -> u16 {
     self.as_lines(width).len() as u16
   }
+
+  pub fn fit(&self, width: u16, height: u16) -> Vec<String> {
+    let mut fitted = trim_vec(self.calc_lines(width));
+    let length = fitted.len();
+    fitted = fitted[0..min(height as usize, length)].to_vec();
+    // while fitted.len() as u16 > height {
+    //   fitted.pop();
+    // }
+
+    // let shrunk = fitted[fitted.len() - 1].shrink(width);
+    let last = fitted.len() - 1;
+    fitted[last] = fitted[last].shrink(width);
+    fitted
+  }
+}
+
+fn trim_vec(untrimmed: Vec<String>) -> Vec<String> {
+  let mut trimmed: Vec<String> = vec![];
+  for line in untrimmed {
+    trimmed.push(line.trim_end().to_string());
+  }
+  trimmed
 }

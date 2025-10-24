@@ -16,6 +16,7 @@ use ratatui::{
   text::Line,
   widgets::{Block, Paragraph, Widget},
 };
+use ratatui_image::Image;
 
 use crate::logger::Logger;
 use crate::multi_line_string::MultiLineString;
@@ -25,7 +26,7 @@ use crate::update::*;
 pub struct Model {
   running_state: RunningState,
   mode: Mode,
-  chats: Vec<Chat>,
+  contacts: Vec<Contact>,
   chat_index: usize,
 }
 
@@ -53,6 +54,14 @@ pub struct Message {
 pub struct Location {
   index: u64,
   offset: i16,
+}
+
+#[derive(Debug, Default)]
+pub struct Contact {
+  name: String,
+  nick_name: String,
+  chat: Chat,
+  // icon: Image,
 }
 
 #[derive(Debug, Default)]
@@ -109,17 +118,24 @@ impl Model {
 
     chat.text_input = TextInput::default();
 
-    let chats: Vec<Chat> = vec![chat];
+    // let chats: Vec<Chat> = vec![chat];
+
+    let contacts = vec![Contact {
+      nick_name: String::from("sarahhhh"),
+      name: String::from("sarah"),
+      chat: chat,
+    }];
 
     let mut model = Model::default();
-    model.chats = chats;
+    model.contacts = contacts;
+    // model.chats = chats;
     model.chat_index = 0;
     model
   }
 
   // not really needed but it staves off the need for explicit liiftimes a little longer
   fn current_chat(&mut self) -> &mut Chat {
-    &mut self.chats[self.chat_index]
+    &mut self.contacts[self.chat_index].chat
   }
 }
 
@@ -167,7 +183,6 @@ impl TextInput {
     }
 
     pos.x += (self.cursor_index - index).clamp(0, area.width - 3);
-
     pos
   }
 
@@ -203,16 +218,7 @@ impl Message {
     //
     // let mut index = 0;
 
-    // let result = &self.lines;
-
-    let vec_lines: Vec<String> = self.body.as_lines(my_area.width - 2).to_vec();
-
-    // match result {
-    //   Some(x) => vec_lines = x.to_vec(),
-    //   None => {
-    //     panic!("AAAaaaHHHhhh!!!")
-    //   }
-    // }
+    let vec_lines: Vec<String> = self.body.as_trimmed_lines(my_area.width - 2);
 
     // shrink the message to fit if it does not need mutliple lines
     if vec_lines.len() == 1 {
@@ -235,7 +241,7 @@ impl Message {
   }
 }
 
-fn format_vec(vec: &Vec<String>) -> String {
+fn _format_vec(vec: &Vec<String>) -> String {
   let mut output = String::from("[");
 
   for thing in vec {
@@ -312,6 +318,61 @@ impl Chat {
   }
 }
 
+trait MyStringUtils {
+  fn shrink<T>(&self, width: T) -> String
+  where
+    T: Into<usize>;
+}
+
+impl MyStringUtils for String {
+  fn shrink<T>(&self, width: T) -> String
+  where
+    T: Into<usize>,
+  {
+    let width = width.into();
+
+    let mut fitted = self.clone();
+
+    if fitted.len() <= width {
+      return fitted;
+    } else {
+      fitted = fitted[..width - 3].to_string();
+      fitted.push_str("...");
+      // fitted.push("...");
+      return fitted;
+    }
+  }
+}
+
+impl Contact {
+  fn render(&self, area: Rect, buf: &mut Buffer) {
+    Block::bordered().border_set(border::THICK).render(area, buf);
+
+    let mut area = area;
+    area.x += 1;
+    area.width -= 2;
+    area.height -= 2;
+    area.y += 1;
+
+    let layout = Layout::horizontal([Constraint::Length(8), Constraint::Min(15), Constraint::Length(3)]).split(area);
+
+    let message_text: Vec<String> = self.last_message().body.fit(layout[1].width, layout[1].height - 1);
+
+    let mut innner_lines: Vec<Line> = vec![Line::from(self.nick_name.shrink(layout[1].width).bold())];
+
+    for line in message_text {
+      innner_lines.push(Line::from(line));
+    }
+
+    Paragraph::new(innner_lines).render(layout[1], buf);
+  }
+
+  fn last_message(&self) -> &Message {
+    let last = self.chat.messages.len() - 1;
+    &self.chat.messages[last]
+  }
+}
+
 fn main() -> color_eyre::Result<()> {
   // tui::install_panic_hook();
   let mut terminal = ratatui::init();
@@ -363,9 +424,29 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
 
   let layout = Layout::new(
     Direction::Horizontal,
-    vec![Constraint::Percentage(20), Constraint::Percentage(80)],
+    vec![Constraint::Percentage(40), Constraint::Percentage(60)],
   )
   .split(frame.area());
+
+  _ = Block::bordered()
+    .border_set(border::THICK)
+    .render(layout[0], frame.buffer_mut());
+
+  let contact_height = 3 + 2;
+
+  let mut contact_area = layout[0];
+  contact_area.width -= 2;
+  contact_area.height = contact_height;
+  contact_area.x += 1;
+  contact_area.y += 1;
+
+  let mut index = 0;
+
+  while contact_area.y < layout[0].height && index < model.contacts.len() {
+    model.contacts[index].render(contact_area, frame.buffer_mut());
+    contact_area.y += contact_height;
+    index += 1;
+  }
 
   model
     .current_chat()
