@@ -6,16 +6,16 @@ mod tests;
 mod update;
 
 use core::fmt;
-use std::{time::Duration, vec};
+use std::{fmt::Debug, time::Duration, vec};
 
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use ratatui::{
   Frame,
   buffer::Buffer,
   layout::{Constraint, Direction, Layout, Position, Rect},
-  style::Stylize,
+  style::{Color, Style, Stylize},
   symbols::border,
-  text::Line,
+  text::{Line, Span},
   widgets::{Block, Paragraph, StatefulWidget, Widget},
 };
 use ratatui_image::{Image, Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
@@ -46,11 +46,38 @@ pub enum Mode {
   Insert,
 }
 
-#[derive(Debug, Default, Clone)]
+// #[derive(Debug, Default)]
+// pub struct TimeStamps {
+//   sent: DateTime<Utc>,
+//   recieved: Option<DateTime<Utc>>,
+//   readby: Option<Vec<(Contact, DateTime<Utc>)>>,
+// }
+
+#[derive(Debug)]
+pub struct NotMyMessage {
+  sender: String,
+  sent: DateTime<Utc>,
+}
+
+pub struct PhoneNumber(String);
+
+#[derive(Debug)]
+pub struct MyMessage {
+  sent: DateTime<Utc>,
+  delivered_to: Vec<(String, Option<DateTime<Utc>>)>,
+  read_by: Vec<(String, Option<DateTime<Utc>>)>,
+}
+
+#[derive(Debug)]
+pub enum Metadata {
+  MyMessage(MyMessage),
+  NotMyMessage(NotMyMessage),
+}
+
+#[derive(Debug)]
 pub struct Message {
   body: MultiLineString,
-  sender: String,
-  time_stamp: DateTime<Utc>,
+  metadata: Metadata,
 }
 
 #[derive(Default, Debug)]
@@ -61,16 +88,18 @@ pub struct Location {
 
 pub struct MyImageWrapper(StatefulProtocol);
 
-impl fmt::Debug for MyImageWrapper {
+// sshhhhhh
+impl Debug for MyImageWrapper {
   fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
     Ok(())
   }
 }
 
+#[derive(Debug, Default)]
 pub struct Contact {
   _name: String,
   nick_name: String,
-  pfp: StatefulProtocol,
+  pfp: Option<MyImageWrapper>,
   chat: Chat,
   // icon: Image,
 }
@@ -113,13 +142,18 @@ impl Model {
         body: MultiLineString::init(
           "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
-        sender: String::from("not me"),
-        time_stamp: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
+        metadata: Metadata::NotMyMessage(NotMyMessage {
+          sender: String::from("not me"),
+          sent: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
+        }),
       },
       Message {
         body: MultiLineString::init("second message"),
-        sender: String::from("me"),
-        time_stamp: Utc::now(),
+        metadata: Metadata::MyMessage(MyMessage {
+          sent: Utc::now(),
+          read_by: vec![("14124206767".to_string(), None)],
+          delivered_to: vec![("14124206767".to_string(), Some(Utc::now()))],
+        }),
       },
     ];
 
@@ -148,7 +182,7 @@ impl Model {
       nick_name: String::from("nickname"),
       _name: String::from("name"),
       chat: chat,
-      pfp: image,
+      pfp: Some(MyImageWrapper(image)),
     }];
 
     let model = Model {
@@ -258,9 +292,13 @@ impl Message {
 
     // "allign" the chat to the right if it was sent by you
     // TODO: should add setting to toggle this behavior
-    if settings.identity == self.sender {
-      my_area.x += area.width - my_area.width;
+    // if self.metadata == Metadata::MyMessage(()) {
+    match self.metadata {
+      Metadata::MyMessage(_) => my_area.x += area.width - my_area.width,
+      _ => {}
     }
+    // my_area.x += area.width - my_area.width;
+    // }
 
     let mut lines: Vec<Line> = Vec::new();
     for yap in vec_lines {
@@ -375,7 +413,14 @@ impl MyStringUtils for String {
   }
 }
 
-fn format_duration(time: &chrono::DateTime<Utc>) -> String {
+fn format_duration(message: &Message) -> String {
+  let time: DateTime<Utc>;
+
+  match &message.metadata {
+    Metadata::NotMyMessage(x) => time = x.sent,
+    Metadata::MyMessage(x) => time = x.sent,
+  }
+
   let duration = Utc::now().signed_duration_since(time);
 
   if duration.num_minutes() < 1 {
@@ -392,18 +437,64 @@ fn format_duration(time: &chrono::DateTime<Utc>) -> String {
     return time.format("%M %D").to_string();
   }
 
-  // let (num, chr): (i64, &str) = match duration.num_seconds() {
-  //   x @ ..59 => (x, "s"),
-  //   x @ 60..3659 => (x / 60, "m"),
-  //   x @  ..Duration::day(1) => (x, "s"),
-  //   x @ ..59 => (x, "s"),
-  //   x @ ..59 => (x, "s"),
-  //   x @ ..59 => (x, "s"),
-  // };
-
   // let mut result = num.to_string();
   // result.push_str(chr);
   // result
+}
+
+impl MyMessage {
+  fn all_read(&self) -> bool {
+    for (_, date) in &self.read_by {
+      match date {
+        Some(_) => {}
+        None => return false,
+      }
+    }
+
+    true
+  }
+
+  fn all_delivered(&self) -> bool {
+    for (_, date) in &self.delivered_to {
+      match date {
+        Some(_) => {}
+        None => return false,
+      }
+    }
+
+    true
+  }
+
+  fn sent(&self) -> bool {
+    true
+  }
+}
+
+impl Message {
+  fn format_delivered_status(&self) -> Line {
+    let check_icon = "";
+
+    return match &self.metadata {
+      Metadata::NotMyMessage(_) => Line::from(""),
+      Metadata::MyMessage(x) => {
+        if x.all_read() {
+          Line::from(Span::styled(
+            [check_icon, check_icon].concat(),
+            Style::default().fg(Color::Red),
+          ))
+        } else if x.all_delivered() {
+          Line::from(Span::styled(
+            [check_icon, check_icon].concat(),
+            Style::default().fg(Color::Blue),
+          ))
+        } else if x.sent() {
+          Line::from(Span::styled(check_icon, Style::default().fg(Color::Blue)))
+        } else {
+          Line::from(Span::styled("_", Style::default().fg(Color::Blue)))
+        }
+      }
+    };
+  }
 }
 
 impl Contact {
@@ -416,7 +507,8 @@ impl Contact {
     area.height -= 2;
     area.y += 1;
 
-    let layout = Layout::horizontal([Constraint::Length(7), Constraint::Min(15), Constraint::Length(6)]).split(area);
+    let layout =
+      Layout::horizontal([Constraint::Length(7), Constraint::Min(15), Constraint::Length(6)]).split(area);
 
     // let image = StatefulImage::default().resize(Resize::Crop(None));
     // let mut pfp = match &self.pfp {
@@ -425,7 +517,7 @@ impl Contact {
     // };
     // // StatefulImage::render(image, layout[0], buf, &mut pfp);
     // let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
-    StatefulImage::new().render(area, buf, &mut self.pfp);
+    StatefulImage::new().render(area, buf, &mut self.pfp.as_mut().unwrap().0);
     let message_text: Vec<String> = self.last_message().body.fit(layout[1].width, layout[1].height - 1);
 
     let mut innner_lines: Vec<Line> = vec![Line::from(self.nick_name.shrink(layout[1].width).bold())];
@@ -436,8 +528,9 @@ impl Contact {
 
     Paragraph::new(innner_lines).render(layout[1], buf);
 
-    let time = format_duration(&self.chat.messages[1].time_stamp);
-    Paragraph::new(time).render(layout[2], buf);
+    let time = format_duration(&self.chat.messages[1]);
+
+    Paragraph::new(vec![Line::from(time), self.last_message().format_delivered_status()]).render(layout[2], buf);
   }
 
   fn last_message(&self) -> &Message {
@@ -521,7 +614,9 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
     index += 1;
   }
 
-  model.current_chat().render(layout[1], frame.buffer_mut(), settings, logger);
+  model
+    .current_chat()
+    .render(layout[1], frame.buffer_mut(), settings, logger);
 
   frame.set_cursor_position(model.current_chat().text_input.cursor_position);
 
