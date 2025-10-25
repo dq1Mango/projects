@@ -9,11 +9,12 @@ use core::fmt;
 use std::{fmt::Debug, time::Duration, vec};
 
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use color_eyre::owo_colors::OwoColorize;
 use ratatui::{
   Frame,
   buffer::Buffer,
   layout::{Constraint, Direction, Layout, Position, Rect},
-  style::{Color, Style, Stylize},
+  style::{Color, Modifier, Style, Stylize},
   symbols::border,
   text::{Line, Span},
   widgets::{Block, Paragraph, StatefulWidget, Widget},
@@ -151,8 +152,8 @@ impl Model {
         body: MultiLineString::init("second message"),
         metadata: Metadata::MyMessage(MyMessage {
           sent: Utc::now(),
-          read_by: vec![("14124206767".to_string(), None)],
-          delivered_to: vec![("14124206767".to_string(), Some(Utc::now()))],
+          read_by: vec![("14124206767".to_string(), Some(Utc::now()))],
+          delivered_to: vec![("14124206767".to_string(), None)],
         }),
       },
     ];
@@ -479,18 +480,18 @@ impl Message {
       Metadata::MyMessage(x) => {
         if x.all_read() {
           Line::from(Span::styled(
-            [check_icon, check_icon].concat(),
-            Style::default().fg(Color::Red),
+            [check_icon, " ", check_icon].concat(),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
           ))
         } else if x.all_delivered() {
           Line::from(Span::styled(
-            [check_icon, check_icon].concat(),
-            Style::default().fg(Color::Blue),
+            [check_icon, " ", check_icon].concat(),
+            Style::default().fg(Color::Gray),
           ))
         } else if x.sent() {
-          Line::from(Span::styled(check_icon, Style::default().fg(Color::Blue)))
+          Line::from(Span::styled(check_icon, Style::default().fg(Color::Gray)))
         } else {
-          Line::from(Span::styled("_", Style::default().fg(Color::Blue)))
+          Line::from(Span::styled("_", Style::default().fg(Color::White)))
         }
       }
     };
