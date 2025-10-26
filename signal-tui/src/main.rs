@@ -6,10 +6,9 @@ mod tests;
 mod update;
 
 use core::fmt;
-use std::{fmt::Debug, time::Duration, vec};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, time::Duration, vec};
 
-use chrono::{DateTime, TimeDelta, TimeZone, Utc};
-use color_eyre::owo_colors::OwoColorize;
+use chrono::{DateTime, TimeDelta, Utc};
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -19,7 +18,7 @@ use ratatui::{
   text::{Line, Span},
   widgets::{Block, Paragraph, StatefulWidget, Widget},
 };
-use ratatui_image::{Image, Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
+use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
 use crate::multi_line_string::MultiLineString;
@@ -29,7 +28,9 @@ use crate::update::*;
 pub struct Model {
   running_state: RunningState,
   mode: Mode,
-  contacts: Vec<Contact>,
+  contacts: HashMap<PhoneNumber, Contact>,
+  // groups: Vec<Group,
+  chats: Vec<Chat>,
   chat_index: usize,
 }
 
@@ -56,17 +57,16 @@ pub enum Mode {
 
 #[derive(Debug)]
 pub struct NotMyMessage {
-  sender: String,
+  sender: u8,
   sent: DateTime<Utc>,
 }
-
-pub struct PhoneNumber(String);
 
 #[derive(Debug)]
 pub struct MyMessage {
   sent: DateTime<Utc>,
-  delivered_to: Vec<(String, Option<DateTime<Utc>>)>,
-  read_by: Vec<(String, Option<DateTime<Utc>>)>,
+  // these r kind of a mess
+  delivered_to: Vec<(u8, Option<DateTime<Utc>>)>,
+  read_by: Vec<(u8, Option<DateTime<Utc>>)>,
 }
 
 #[derive(Debug)]
@@ -96,18 +96,35 @@ impl Debug for MyImageWrapper {
   }
 }
 
+#[derive(Hash, PartialEq, Eq, Debug)]
+struct PhoneNumber(String);
+
+impl Clone for PhoneNumber {
+  fn clone(&self) -> Self {
+    PhoneNumber(self.0.clone())
+  }
+}
+
+#[derive(Debug, Default)]
+struct Group {
+  name: String,
+  icon: Option<MyImageWrapper>,
+  members: Vec<PhoneNumber>,
+  _description: String,
+}
+
 #[derive(Debug, Default)]
 pub struct Contact {
   _name: String,
   nick_name: String,
   pfp: Option<MyImageWrapper>,
-  chat: Chat,
   // icon: Image,
 }
 
 #[derive(Debug, Default)]
 pub struct Chat {
   // id: u8,
+  participants: Group,
   messages: Vec<Message>,
   location: Location,
   text_input: TextInput,
@@ -123,7 +140,7 @@ pub struct TextInput {
 pub struct Settings {
   borders: bool,
   message_width_ratio: f32,
-  identity: String,
+  _identity: String,
 }
 
 impl Settings {
@@ -131,7 +148,7 @@ impl Settings {
     Self {
       borders: true,
       message_width_ratio: 0.8,
-      identity: "me".to_string(),
+      _identity: "me".to_string(),
     }
   }
 }
@@ -144,7 +161,7 @@ impl Model {
           "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
         metadata: Metadata::NotMyMessage(NotMyMessage {
-          sender: String::from("not me"),
+          sender: 1,
           sent: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
         }),
       },
@@ -152,8 +169,8 @@ impl Model {
         body: MultiLineString::init("second message"),
         metadata: Metadata::MyMessage(MyMessage {
           sent: Utc::now(),
-          read_by: vec![("14124206767".to_string(), Some(Utc::now()))],
-          delivered_to: vec![("14124206767".to_string(), None)],
+          read_by: vec![(0, Some(Utc::now()))],
+          delivered_to: vec![(0, None)],
         }),
       },
     ];
@@ -164,8 +181,15 @@ impl Model {
       chat.messages.push(message);
     }
 
+    let dummy_number = PhoneNumber("14124206767".to_string());
+    chat.participants = Group {
+      members: vec![dummy_number.clone()],
+      name: "group 1".to_string(),
+      icon: None,
+      _description: "".to_string(),
+    };
     chat.text_input = TextInput::default();
-
+    chat.location = Location { index: 1, offset: 0 };
     // let chats: Vec<Chat> = vec![chat];
 
     let picker = Picker::from_query_stdio().expect("kaboom");
@@ -179,16 +203,21 @@ impl Model {
     // Create the Protocol which will be used by the widget.
     let image = picker.new_resize_protocol(dyn_img);
 
-    let contacts = vec![Contact {
-      nick_name: String::from("nickname"),
-      _name: String::from("name"),
-      chat: chat,
-      pfp: Some(MyImageWrapper(image)),
-    }];
+    let mut contacts = HashMap::new();
+
+    contacts.insert(
+      dummy_number,
+      Contact {
+        nick_name: String::from("nickname"),
+        _name: String::from("name"),
+        pfp: Some(MyImageWrapper(image)),
+      },
+    );
 
     let model = Model {
       chat_index: 0,
       contacts: contacts,
+      chats: vec![chat],
       running_state: RunningState::Running,
       mode: Mode::Normal,
     };
@@ -201,7 +230,7 @@ impl Model {
 
   // not really needed but it staves off the need for explicit liiftimes a little longer
   fn current_chat(&mut self) -> &mut Chat {
-    &mut self.contacts[self.chat_index].chat
+    &mut self.chats[self.chat_index]
   }
 }
 
@@ -277,13 +306,6 @@ impl Message {
     my_area.width = (area.width as f32 * settings.message_width_ratio + 0.5) as u16;
     // let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
 
-    // let mut new_area = area.clone();
-    // new_area.width = area.width;
-    //
-    // let mut lines: Vec<String> = Vec::new();
-    //
-    // let mut index = 0;
-
     let vec_lines: Vec<String> = self.body.as_trimmed_lines(my_area.width - 2);
 
     // shrink the message to fit if it does not need mutliple lines
@@ -293,13 +315,11 @@ impl Message {
 
     // "allign" the chat to the right if it was sent by you
     // TODO: should add setting to toggle this behavior
-    // if self.metadata == Metadata::MyMessage(()) {
-    match self.metadata {
-      Metadata::MyMessage(_) => my_area.x += area.width - my_area.width,
-      _ => {}
+
+    // look at this cool syntax i learned today
+    if let Metadata::MyMessage(_) = self.metadata {
+      my_area.x += area.width - my_area.width;
     }
-    // my_area.x += area.width - my_area.width;
-    // }
 
     let mut lines: Vec<Line> = Vec::new();
     for yap in vec_lines {
@@ -385,6 +405,10 @@ impl Chat {
     }
 
     self.text_input.render(layout[1], buf, logger);
+  }
+  fn last_message(&self) -> &Message {
+    let last = self.messages.len() - 1;
+    &self.messages[last]
   }
 }
 
@@ -498,48 +522,85 @@ impl Message {
   }
 }
 
-impl Contact {
-  fn render(&mut self, area: Rect, buf: &mut Buffer) {
-    Block::bordered().border_set(border::THICK).render(area, buf);
+fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
+  let icon = &mut chat.participants.icon;
 
-    let mut area = area;
-    area.x += 1;
-    area.width -= 2;
-    area.height -= 2;
-    area.y += 1;
+  Block::bordered().border_set(border::THICK).render(area, buf);
 
-    let layout =
-      Layout::horizontal([Constraint::Length(7), Constraint::Min(15), Constraint::Length(6)]).split(area);
+  let mut area = area;
+  area.x += 1;
+  area.width -= 2;
+  area.height -= 2;
+  area.y += 1;
 
-    // let image = StatefulImage::default().resize(Resize::Crop(None));
-    // let mut pfp = match &self.pfp {
-    //   Some(x) => x.0,
-    //   None => panic!("Aaaaaahhhhh"),
-    // };
-    // // StatefulImage::render(image, layout[0], buf, &mut pfp);
-    // let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
-    StatefulImage::new().render(area, buf, &mut self.pfp.as_mut().unwrap().0);
-    let message_text: Vec<String> = self.last_message().body.fit(layout[1].width, layout[1].height - 1);
+  let layout = Layout::horizontal([Constraint::Length(7), Constraint::Min(15), Constraint::Length(6)]).split(area);
 
-    let mut innner_lines: Vec<Line> = vec![Line::from(self.nick_name.shrink(layout[1].width).bold())];
-
-    for line in message_text {
-      innner_lines.push(Line::from(line));
-    }
-
-    Paragraph::new(innner_lines).render(layout[1], buf);
-
-    let time = format_duration(&self.chat.messages[1]);
-
-    Paragraph::new(vec![Line::from(time), self.last_message().format_delivered_status()]).render(layout[2], buf);
+  // let image = StatefulImage::default().resize(Resize::Crop(None));
+  // let mut pfp = match &self.pfp {
+  //   Some(x) => x.0,
+  //   None => panic!("Aaaaaahhhhh"),
+  // };
+  // // StatefulImage::render(image, layout[0], buf, &mut pfp);
+  // let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
+  match icon.as_mut() {
+    Some(image) => StatefulImage::new().render(area, buf, &mut image.0),
+    None => {}
   }
 
-  fn last_message(&self) -> &Message {
-    let last = self.chat.messages.len() - 1;
-    &self.chat.messages[last]
+  let last_message = chat.last_message();
+  let group = &chat.participants;
+
+  let message_text: Vec<String> = last_message.body.fit(layout[1].width, layout[1].height - 1);
+
+  let mut innner_lines: Vec<Line> = vec![Line::from(group.name.shrink(layout[1].width).bold())];
+
+  for line in message_text {
+    innner_lines.push(Line::from(line));
   }
+
+  Paragraph::new(innner_lines).render(layout[1], buf);
+
+  let time = format_duration(last_message);
+
+  Paragraph::new(vec![Line::from(time), last_message.format_delivered_status()]).render(layout[2], buf);
 }
 
+// impl Group {
+//   fn render(&mut self, last_message: &Message, area: Rect, buf: &mut Buffer) {
+//     Block::bordered().border_set(border::THICK).render(area, buf);
+//
+//     let mut area = area;
+//     area.x += 1;
+//     area.width -= 2;
+//     area.height -= 2;
+//     area.y += 1;
+//
+//     let layout = Layout::horizontal([Constraint::Length(7), Constraint::Min(15), Constraint::Length(6)]).split(area);
+//
+//     // let image = StatefulImage::default().resize(Resize::Crop(None));
+//     // let mut pfp = match &self.pfp {
+//     //   Some(x) => x.0,
+//     //   None => panic!("Aaaaaahhhhh"),
+//     // };
+//     // // StatefulImage::render(image, layout[0], buf, &mut pfp);
+//     // let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
+//     StatefulImage::new().render(area, buf, &mut self.icon.as_mut().unwrap().0);
+//     let message_text: Vec<String> = last_message.body.fit(layout[1].width, layout[1].height - 1);
+//
+//     let mut innner_lines: Vec<Line> = vec![Line::from(self.name.shrink(layout[1].width).bold())];
+//
+//     for line in message_text {
+//       innner_lines.push(Line::from(line));
+//     }
+//
+//     Paragraph::new(innner_lines).render(layout[1], buf);
+//
+//     let time = format_duration(last_message);
+//
+//     Paragraph::new(vec![Line::from(time), last_message.format_delivered_status()]).render(layout[2], buf);
+//   }
+// }
+//
 fn main() -> color_eyre::Result<()> {
   // tui::install_panic_hook();
   let mut terminal = ratatui::init();
@@ -609,15 +670,16 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
 
   let mut index = 0;
 
-  while contact_area.y < layout[0].height && index < model.contacts.len() {
-    model.contacts[index].render(contact_area, frame.buffer_mut());
+  while contact_area.y < layout[0].height && index < model.chats.len() {
+    let chat = &mut model.chats[index];
+    render_group(chat, contact_area, frame.buffer_mut());
+    // let last = &(&mut model.chats)[index].last_message();
+    // model.chats[index].participants.render(last, contact_area, frame.buffer_mut());
     contact_area.y += contact_height;
     index += 1;
   }
 
-  model
-    .current_chat()
-    .render(layout[1], frame.buffer_mut(), settings, logger);
+  model.current_chat().render(layout[1], frame.buffer_mut(), settings, logger);
 
   frame.set_cursor_position(model.current_chat().text_input.cursor_position);
 
