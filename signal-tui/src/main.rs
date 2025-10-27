@@ -384,6 +384,11 @@ impl Chat {
         break;
       }
 
+      if y + height as i16 > area.height as i16 {
+        index -= 1;
+        continue;
+      }
+
       // let height = min(y + requested_height, area.height);
       let new_area = Rect::new(area.x, area.y + y as u16, area.width, height as u16);
 
@@ -392,7 +397,6 @@ impl Chat {
       if index == 0 {
         break;
       }
-
       index -= 1;
     }
 
