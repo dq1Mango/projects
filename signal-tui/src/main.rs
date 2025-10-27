@@ -182,15 +182,6 @@ impl Model {
     }
 
     let dummy_number = PhoneNumber("14124206767".to_string());
-    chat.participants = Group {
-      members: vec![dummy_number.clone()],
-      name: "group 1".to_string(),
-      icon: None,
-      _description: "".to_string(),
-    };
-    chat.text_input = TextInput::default();
-    chat.location = Location { index: 1, offset: 0 };
-    // let chats: Vec<Chat> = vec![chat];
 
     let picker = Picker::from_query_stdio().expect("kaboom");
 
@@ -201,7 +192,18 @@ impl Model {
       .unwrap();
 
     // Create the Protocol which will be used by the widget.
-    let image = picker.new_resize_protocol(dyn_img);
+    let image = picker.new_resize_protocol(dyn_img.clone());
+    let image2 = picker.new_resize_protocol(dyn_img);
+
+    chat.participants = Group {
+      members: vec![dummy_number.clone()],
+      name: "group 1".to_string(),
+      icon: Some(MyImageWrapper(image)),
+      _description: "".to_string(),
+    };
+    chat.text_input = TextInput::default();
+    chat.location = Location { index: 1, offset: 0 };
+    // let chats: Vec<Chat> = vec![chat];
 
     let mut contacts = HashMap::new();
 
@@ -210,7 +212,7 @@ impl Model {
       Contact {
         nick_name: String::from("nickname"),
         _name: String::from("name"),
-        pfp: Some(MyImageWrapper(image)),
+        pfp: Some(MyImageWrapper(image2)),
       },
     );
 
