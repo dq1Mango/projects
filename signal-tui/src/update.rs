@@ -7,6 +7,7 @@ use crossterm::event::{self, Event, KeyCode};
 pub enum Action {
   Type(char),
   Backspace,
+  Scroll(i16),
 
   SetMode(Mode),
 
@@ -39,6 +40,11 @@ pub fn handle_key(key: event::KeyEvent, model: &Model) -> Option<Action> {
       _ => None,
     },
     Mode::Normal => match key.code {
+      KeyCode::Char('j') => Some(Action::Scroll(1)),
+      KeyCode::Char('k') => Some(Action::Scroll(-1)),
+      KeyCode::Char('d') => Some(Action::Scroll(10)),
+      KeyCode::Char('u') => Some(Action::Scroll(-10)),
+
       KeyCode::Char('i') => Some(Action::SetMode(Mode::Insert)),
       // KeyCode::Char('k') => Some(Action::Decrement),
       KeyCode::Char('q') => Some(Action::Quit),
@@ -53,6 +59,8 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
       model.current_chat().text_input.insert_char(char, logger);
     }
     Action::Backspace => model.current_chat().text_input.delete_char(),
+
+    Action::Scroll(lines) => model.current_chat().location.offset += lines,
 
     Action::SetMode(new_mode) => model.mode = new_mode,
 

@@ -5,7 +5,6 @@ mod tests;
 
 mod update;
 
-use core::fmt;
 use std::{collections::HashMap, fmt::Debug, hash::Hash, time::Duration, vec};
 
 use chrono::{DateTime, TimeDelta, Utc};
@@ -18,7 +17,7 @@ use ratatui::{
   text::{Line, Span},
   widgets::{Block, Paragraph, StatefulWidget, Widget},
 };
-use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
+// use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
 use crate::multi_line_string::MultiLineString;
@@ -83,18 +82,18 @@ pub struct Message {
 
 #[derive(Default, Debug)]
 pub struct Location {
-  index: u64,
+  index: usize,
   offset: i16,
 }
 
-pub struct MyImageWrapper(StatefulProtocol);
+// pub struct MyImageWrapper(StatefulProtocol);
 
 // sshhhhhh
-impl Debug for MyImageWrapper {
-  fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    Ok(())
-  }
-}
+// impl Debug for MyImageWrapper {
+//   fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//     Ok(())
+//   }
+// }
 
 #[derive(Hash, PartialEq, Eq, Debug)]
 struct PhoneNumber(String);
@@ -108,7 +107,7 @@ impl Clone for PhoneNumber {
 #[derive(Debug, Default)]
 struct Group {
   name: String,
-  icon: Option<MyImageWrapper>,
+  // icon: Option<MyImageWrapper>,
   members: Vec<PhoneNumber>,
   _description: String,
 }
@@ -117,7 +116,7 @@ struct Group {
 pub struct Contact {
   _name: String,
   nick_name: String,
-  pfp: Option<MyImageWrapper>,
+  // pfp: Option<MyImageWrapper>,
   // icon: Image,
 }
 
@@ -183,22 +182,22 @@ impl Model {
 
     let dummy_number = PhoneNumber("14124206767".to_string());
 
-    let picker = Picker::from_query_stdio().expect("kaboom");
+    // let picker = Picker::from_query_stdio().expect("kaboom");
 
     // Load an image with the image crate.
-    let dyn_img = image::ImageReader::open("./assets/ferris_the_wheel.jpg")
-      .unwrap()
-      .decode()
-      .unwrap();
+    // let dyn_img = image::ImageReader::open("./assets/ferris_the_wheel.jpg")
+    //   .unwrap()
+    //   .decode()
+    //   .unwrap();
 
     // Create the Protocol which will be used by the widget.
-    let image = picker.new_resize_protocol(dyn_img.clone());
-    let image2 = picker.new_resize_protocol(dyn_img);
+    // let image = picker.new_resize_protocol(dyn_img.clone());
+    // let image2 = picker.new_resize_protocol(dyn_img);
 
     chat.participants = Group {
       members: vec![dummy_number.clone()],
       name: "group 1".to_string(),
-      icon: Some(MyImageWrapper(image)),
+      // icon: Some(MyImageWrapper(image)),
       _description: "".to_string(),
     };
     chat.text_input = TextInput::default();
@@ -212,7 +211,7 @@ impl Model {
       Contact {
         nick_name: String::from("nickname"),
         _name: String::from("name"),
-        pfp: Some(MyImageWrapper(image2)),
+        // pfp: Some(MyImageWrapper(image2)),
       },
     );
 
@@ -372,38 +371,29 @@ impl Chat {
 
     let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
 
-    let mut index = 0;
-    let mut y = self.location.offset * -1;
+    let mut index = self.location.index;
+    let mut y = area.height as i16 + self.location.offset;
 
-    while y < area.height as i16 && index < self.messages.len() {
+    loop {
       let message = &mut self.messages[index];
 
-      // only here for testing; remove later; breaks the fun "cache" system
-      // message.lines = message.as_lines(message_width);
-
-      // let result = message.body.as_lines(mes);
-
-      // match result {
-      //   Some(_x) => {}
-      //   None => {
-      //     message.lines = Some(message.split_into_lines(message_width));
-      //     let this_better_work = &message.lines;
-      //     match this_better_work {
-      //       Some(_x) => {}
-      //       None => panic!("AAAaaaHHHhhh!!!"),
-      //     }
-      //   }
-      // }
-
       let height = message.body.rows(message_width) + 2;
+
+      y -= height as i16;
+      if y < 0 {
+        break;
+      }
 
       // let height = min(y + requested_height, area.height);
       let new_area = Rect::new(area.x, area.y + y as u16, area.width, height as u16);
 
       message.render(new_area, buf, settings, logger);
 
-      index += 1;
-      y += height as i16;
+      if index == 0 {
+        break;
+      }
+
+      index -= 1;
     }
 
     self.text_input.render(layout[1], buf, logger);
@@ -498,7 +488,8 @@ impl MyMessage {
 }
 
 impl Message {
-  fn format_delivered_status(&self) -> Line {
+  // i thought i knew how lifetimes worked
+  fn format_delivered_status(&self) -> Line<'_> {
     let check_icon = "";
 
     return match &self.metadata {
@@ -525,7 +516,7 @@ impl Message {
 }
 
 fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
-  let icon = &mut chat.participants.icon;
+  // let icon = &mut chat.participants.icon;
 
   Block::bordered().border_set(border::THICK).render(area, buf);
 
@@ -544,10 +535,11 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
   // };
   // // StatefulImage::render(image, layout[0], buf, &mut pfp);
   // let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
-  match icon.as_mut() {
-    Some(image) => StatefulImage::new().render(area, buf, &mut image.0),
-    None => {}
-  }
+
+  // match icon.as_mut() {
+  // Some(image) => StatefulImage::new().render(area, buf, &mut image.0),
+  // None => {}
+  // }
 
   let last_message = chat.last_message();
   let group = &chat.participants;
