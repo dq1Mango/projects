@@ -416,37 +416,38 @@ impl Chat {
 
     let mut scroll = self.location.requested_scroll;
     let mut index = self.location.index;
+    let mut offset = self.location.offset;
 
     if scroll > 0 {
       while scroll > 0 {
         if index + 1 == self.messages.len() {
-          self.location.offset = 0;
+          offset = 0;
           break;
         }
 
         let height = self.messages[index + 1].height(message_width);
 
-        if height as i16 > scroll + self.location.offset {
-          self.location.offset += scroll;
+        if height as i16 > scroll + offset {
+          offset += scroll;
           break;
         }
         index += 1;
         scroll -= height as i16;
 
         if scroll < 0 {
-          self.location.offset += scroll;
+          offset += scroll;
           // self.location.offset %= height as i16;
           scroll = 0;
         }
       }
     } else if scroll < 0 {
       while scroll < 0 {
-        if self.location.offset as i16 >= scroll * -1 {
-          self.location.offset += scroll;
+        if offset as i16 >= scroll * -1 {
+          offset += scroll;
           break;
         }
         if index == 0 {
-          self.location.offset = 0;
+          offset = 0;
           break;
         }
 
@@ -455,7 +456,7 @@ impl Chat {
         index -= 1;
 
         if scroll > 0 {
-          self.location.offset = scroll;
+          offset = scroll;
           scroll = 0;
         }
 
@@ -469,7 +470,7 @@ impl Chat {
     }
 
     self.location.index = index;
-
+    self.location.offset = offset;
     self.location.requested_scroll = 0;
 
     let mut y = area.height as i16 - self.location.offset;
@@ -750,7 +751,9 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
     index += 1;
   }
 
-  model.current_chat().render(layout[1], frame.buffer_mut(), settings, logger);
+  model
+    .current_chat()
+    .render(layout[1], frame.buffer_mut(), settings, logger);
 
   frame.set_cursor_position(model.current_chat().text_input.cursor_position);
 
