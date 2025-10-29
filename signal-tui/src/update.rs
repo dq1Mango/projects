@@ -40,10 +40,10 @@ pub fn handle_key(key: event::KeyEvent, model: &Model) -> Option<Action> {
       _ => None,
     },
     Mode::Normal => match key.code {
-      KeyCode::Char('j') => Some(Action::Scroll(1)),
-      KeyCode::Char('k') => Some(Action::Scroll(-1)),
-      KeyCode::Char('d') => Some(Action::Scroll(10)),
-      KeyCode::Char('u') => Some(Action::Scroll(-10)),
+      KeyCode::Char('j') => Some(Action::Scroll(-1)),
+      KeyCode::Char('k') => Some(Action::Scroll(1)),
+      KeyCode::Char('d') => Some(Action::Scroll(-10)),
+      KeyCode::Char('u') => Some(Action::Scroll(10)),
 
       KeyCode::Char('i') => Some(Action::SetMode(Mode::Insert)),
       // KeyCode::Char('k') => Some(Action::Decrement),
@@ -60,7 +60,7 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
     }
     Action::Backspace => model.current_chat().text_input.delete_char(),
 
-    Action::Scroll(lines) => model.current_chat().location.offset += lines,
+    Action::Scroll(lines) => model.current_chat().location.requested_scroll = lines,
 
     Action::SetMode(new_mode) => model.mode = new_mode,
 
@@ -72,3 +72,15 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
   };
   None
 }
+
+// pub fn scroll(chat: &mut Chat, lines: i16, settings: Settings) {
+//   let mut lines = lines;
+//
+//   // oh man i sure hope this ugly line of repeated code will not f*** me over in the future
+//     let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
+//
+//   loop {
+//     let height = chat.messages[chat.location.index].body.as_lines(message_width).len();
+//     if lines
+//   }
+// }

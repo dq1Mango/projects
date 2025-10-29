@@ -7,7 +7,7 @@ mod update;
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash, time::Duration, vec};
 
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::{DateTime, TimeDelta, Utc, offset};
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -84,6 +84,7 @@ pub struct Message {
 pub struct Location {
   index: usize,
   offset: i16,
+  requested_scroll: i16,
 }
 
 // pub struct MyImageWrapper(StatefulProtocol);
@@ -172,6 +173,14 @@ impl Model {
           delivered_to: vec![(0, None)],
         }),
       },
+      Message {
+        body: MultiLineString::init("a luxurious third message because im not convinced yet"),
+        metadata: Metadata::MyMessage(MyMessage {
+          sent: Utc::now(),
+          read_by: vec![(0, None)],
+          delivered_to: vec![(0, None)],
+        }),
+      },
     ];
 
     let mut chat = Chat::default();
@@ -201,7 +210,11 @@ impl Model {
       _description: "".to_string(),
     };
     chat.text_input = TextInput::default();
-    chat.location = Location { index: 1, offset: 0 };
+    chat.location = Location {
+      index: 1,
+      offset: 0,
+      requested_scroll: 0,
+    };
     // let chats: Vec<Chat> = vec![chat];
 
     let mut contacts = HashMap::new();
@@ -330,6 +343,36 @@ impl Message {
     Paragraph::new(lines).block(block).render(my_area, buf)
     // .wrap(Wrap { trim: true })
   }
+
+  // i thought i knew how lifetimes worked
+  fn format_delivered_status(&self) -> Line<'_> {
+    let check_icon = "";
+
+    return match &self.metadata {
+      Metadata::NotMyMessage(_) => Line::from(""),
+      Metadata::MyMessage(x) => {
+        if x.all_read() {
+          Line::from(Span::styled(
+            [check_icon, " ", check_icon].concat(),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+          ))
+        } else if x.all_delivered() {
+          Line::from(Span::styled(
+            [check_icon, " ", check_icon].concat(),
+            Style::default().fg(Color::Gray),
+          ))
+        } else if x.sent() {
+          Line::from(Span::styled(check_icon, Style::default().fg(Color::Gray)))
+        } else {
+          Line::from(Span::styled("_", Style::default().fg(Color::White)))
+        }
+      }
+    };
+  }
+
+  fn height(&mut self, width: u16) -> u16 {
+    self.body.as_lines(width).len() as u16 + 2
+  }
 }
 
 fn _format_vec(vec: &Vec<String>) -> String {
@@ -371,8 +414,65 @@ impl Chat {
 
     let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
 
+    let mut scroll = self.location.requested_scroll;
     let mut index = self.location.index;
-    let mut y = area.height as i16 + self.location.offset;
+
+    if scroll > 0 {
+      while scroll > 0 {
+        if index + 1 == self.messages.len() {
+          self.location.offset = 0;
+          break;
+        }
+
+        let height = self.messages[index + 1].height(message_width);
+
+        if height as i16 > scroll + self.location.offset {
+          self.location.offset += scroll;
+          break;
+        }
+        index += 1;
+        scroll -= height as i16;
+
+        if scroll < 0 {
+          self.location.offset += scroll;
+          // self.location.offset %= height as i16;
+          scroll = 0;
+        }
+      }
+    } else if scroll < 0 {
+      while scroll < 0 {
+        if self.location.offset as i16 >= scroll * -1 {
+          self.location.offset += scroll;
+          break;
+        }
+        if index == 0 {
+          self.location.offset = 0;
+          break;
+        }
+
+        let height = self.messages[index].height(message_width);
+        scroll += height as i16;
+        index -= 1;
+
+        if scroll > 0 {
+          self.location.offset = scroll;
+          scroll = 0;
+        }
+
+        // if height <= (scroll * -1) as u16 {
+        //   scroll += height as i16;
+        // } else {
+        //   self.location.offset = height as i16 + scroll;
+        //   scroll = 0;
+        // }
+      }
+    }
+
+    self.location.index = index;
+
+    self.location.requested_scroll = 0;
+
+    let mut y = area.height as i16 - self.location.offset;
 
     loop {
       let message = &mut self.messages[index];
@@ -402,6 +502,7 @@ impl Chat {
 
     self.text_input.render(layout[1], buf, logger);
   }
+
   fn last_message(&self) -> &Message {
     let last = self.messages.len() - 1;
     &self.messages[last]
@@ -488,34 +589,6 @@ impl MyMessage {
 
   fn sent(&self) -> bool {
     true
-  }
-}
-
-impl Message {
-  // i thought i knew how lifetimes worked
-  fn format_delivered_status(&self) -> Line<'_> {
-    let check_icon = "";
-
-    return match &self.metadata {
-      Metadata::NotMyMessage(_) => Line::from(""),
-      Metadata::MyMessage(x) => {
-        if x.all_read() {
-          Line::from(Span::styled(
-            [check_icon, " ", check_icon].concat(),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
-          ))
-        } else if x.all_delivered() {
-          Line::from(Span::styled(
-            [check_icon, " ", check_icon].concat(),
-            Style::default().fg(Color::Gray),
-          ))
-        } else if x.sent() {
-          Line::from(Span::styled(check_icon, Style::default().fg(Color::Gray)))
-        } else {
-          Line::from(Span::styled("_", Style::default().fg(Color::White)))
-        }
-      }
-    };
   }
 }
 
