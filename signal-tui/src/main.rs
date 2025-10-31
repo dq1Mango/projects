@@ -5,9 +5,9 @@ mod tests;
 
 mod update;
 
-use std::{collections::HashMap, fmt::Debug, hash::Hash, time::Duration, vec};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, rc::Rc, time::Duration, vec};
 
-use chrono::{DateTime, TimeDelta, Utc, offset};
+use chrono::{DateTime, TimeDelta, Utc};
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -15,7 +15,7 @@ use ratatui::{
   style::{Color, Modifier, Style, Stylize},
   symbols::border,
   text::{Line, Span},
-  widgets::{Block, Paragraph, StatefulWidget, Widget},
+  widgets::{Block, Paragraph, Widget},
 };
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
@@ -27,7 +27,7 @@ use crate::update::*;
 pub struct Model {
   running_state: RunningState,
   mode: Mode,
-  contacts: HashMap<PhoneNumber, Contact>,
+  contacts: Contacts,
   // groups: Vec<Group,
   chats: Vec<Chat>,
   chat_index: usize,
@@ -56,7 +56,7 @@ pub enum Mode {
 
 #[derive(Debug)]
 pub struct NotMyMessage {
-  sender: u8,
+  sender: PhoneNumber,
   sent: DateTime<Utc>,
 }
 
@@ -64,8 +64,8 @@ pub struct NotMyMessage {
 pub struct MyMessage {
   sent: DateTime<Utc>,
   // these r kind of a mess
-  delivered_to: Vec<(u8, Option<DateTime<Utc>>)>,
-  read_by: Vec<(u8, Option<DateTime<Utc>>)>,
+  delivered_to: Vec<(PhoneNumber, Option<DateTime<Utc>>)>,
+  read_by: Vec<(PhoneNumber, Option<DateTime<Utc>>)>,
 }
 
 #[derive(Debug)]
@@ -121,6 +121,8 @@ pub struct Contact {
   // icon: Image,
 }
 
+type Contacts = Rc<HashMap<PhoneNumber, Contact>>;
+
 #[derive(Debug, Default)]
 pub struct Chat {
   // id: u8,
@@ -155,13 +157,15 @@ impl Settings {
 
 impl Model {
   fn init() -> Self {
+    let dummy_number = PhoneNumber("14124206767".to_string());
+
     let messages = vec![
       Message {
         body: MultiLineString::init(
           "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
         metadata: Metadata::NotMyMessage(NotMyMessage {
-          sender: 1,
+          sender: dummy_number.clone(),
           sent: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
         }),
       },
@@ -169,16 +173,16 @@ impl Model {
         body: MultiLineString::init("second message"),
         metadata: Metadata::MyMessage(MyMessage {
           sent: Utc::now(),
-          read_by: vec![(0, Some(Utc::now()))],
-          delivered_to: vec![(0, None)],
+          read_by: vec![(dummy_number.clone(), Some(Utc::now()))],
+          delivered_to: vec![(dummy_number.clone(), None)],
         }),
       },
       Message {
         body: MultiLineString::init("a luxurious third message because im not convinced yet"),
         metadata: Metadata::MyMessage(MyMessage {
           sent: Utc::now(),
-          read_by: vec![(0, None)],
-          delivered_to: vec![(0, None)],
+          read_by: vec![(dummy_number.clone(), None)],
+          delivered_to: vec![(dummy_number.clone(), None)],
         }),
       },
     ];
@@ -188,8 +192,6 @@ impl Model {
     for message in messages {
       chat.messages.push(message);
     }
-
-    let dummy_number = PhoneNumber("14124206767".to_string());
 
     // let picker = Picker::from_query_stdio().expect("kaboom");
 
@@ -230,7 +232,7 @@ impl Model {
 
     let model = Model {
       chat_index: 0,
-      contacts: contacts,
+      contacts: Rc::new(contacts),
       chats: vec![chat],
       running_state: RunningState::Running,
       mode: Mode::Normal,
@@ -249,7 +251,7 @@ impl Model {
 }
 
 impl TextInput {
-  fn render(&mut self, area: Rect, buf: &mut Buffer, _logger: &mut Logger) {
+  fn render(&mut self, area: Rect, buf: &mut Buffer) {
     let block = Block::bordered().border_set(border::THICK);
 
     // shitty temp padding for the border
@@ -312,9 +314,12 @@ impl TextInput {
 }
 
 impl Message {
-  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, _logger: &mut Logger) {
-    let block = Block::bordered().border_set(border::THICK);
+  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, contacts: &Contacts) {
+    let mut block = Block::bordered().border_set(border::THICK);
 
+    if let Metadata::NotMyMessage(x) = &self.metadata {
+      block = block.title_top(Line::from(contacts[&x.sender].nick_name.clone()).left_aligned());
+    }
     // this ugly shadow cost me a good 15 mins of my life ... but im not changing it
     let mut my_area = area.clone();
     my_area.width = (area.width as f32 * settings.message_width_ratio + 0.5) as u16;
@@ -389,7 +394,7 @@ fn _format_vec(vec: &Vec<String>) -> String {
 }
 
 impl Chat {
-  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, logger: &mut Logger) {
+  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, contacts: Contacts) {
     let input_lines = self.text_input.body.rows(area.width - 3);
     // Logger::log("this is our input: ".to_string());
     // Logger::log(format_vec(self.text_input.body.as_lines(area.width - 2)));
@@ -418,6 +423,8 @@ impl Chat {
     let mut index = self.location.index;
     let mut offset = self.location.offset;
 
+    // yeah this scrolling logic is a little ugly but im not sure how to make it less so
+    // also im a little scared to touch it
     if scroll > 0 {
       while scroll > 0 {
         if index + 1 == self.messages.len() {
@@ -436,7 +443,6 @@ impl Chat {
 
         if scroll < 0 {
           offset += scroll;
-          // self.location.offset %= height as i16;
           scroll = 0;
         }
       }
@@ -459,13 +465,6 @@ impl Chat {
           offset = scroll;
           scroll = 0;
         }
-
-        // if height <= (scroll * -1) as u16 {
-        //   scroll += height as i16;
-        // } else {
-        //   self.location.offset = height as i16 + scroll;
-        //   scroll = 0;
-        // }
       }
     }
 
@@ -485,23 +484,19 @@ impl Chat {
         break;
       }
 
-      if y + height as i16 > area.height as i16 {
-        index -= 1;
-        continue;
-      }
-
       // let height = min(y + requested_height, area.height);
       let new_area = Rect::new(area.x, area.y + y as u16, area.width, height as u16);
 
-      message.render(new_area, buf, settings, logger);
+      message.render(new_area, buf, settings, &contacts);
 
       if index == 0 {
         break;
       }
+
       index -= 1;
     }
 
-    self.text_input.render(layout[1], buf, logger);
+    self.text_input.render(layout[1], buf);
   }
 
   fn last_message(&self) -> &Message {
@@ -672,7 +667,9 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
 //     Paragraph::new(vec![Line::from(time), last_message.format_delivered_status()]).render(layout[2], buf);
 //   }
 // }
-//
+// /
+
+// main ---
 fn main() -> color_eyre::Result<()> {
   // tui::install_panic_hook();
   let mut terminal = ratatui::init();
@@ -685,7 +682,7 @@ fn main() -> color_eyre::Result<()> {
 
   while model.running_state != RunningState::OhShit {
     // Render the current view
-    terminal.draw(|f| view(&mut model, f, settings, logger))?;
+    terminal.draw(|f| view(&mut model, f, settings))?;
 
     // Handle events and map to a Message
     let mut current_msg = handle_event(&model)?;
@@ -702,7 +699,7 @@ fn main() -> color_eyre::Result<()> {
 
 // TODO: gotta figure out how to model chat state
 
-fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut Logger) {
+fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
   let title = Line::from(" Counter App Tutorial ".bold());
   let instructions = Line::from(vec![
     " Decrement ".into(),
@@ -751,9 +748,10 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings, logger: &mut 
     index += 1;
   }
 
+  let contacts = Rc::clone(&model.contacts);
   model
     .current_chat()
-    .render(layout[1], frame.buffer_mut(), settings, logger);
+    .render(layout[1], frame.buffer_mut(), settings, contacts);
 
   frame.set_cursor_position(model.current_chat().text_input.cursor_position);
 
