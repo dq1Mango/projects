@@ -5,7 +5,16 @@ mod tests;
 
 mod update;
 
-use std::{collections::HashMap, fmt::Debug, hash::Hash, rc::Rc, time::Duration, vec};
+use std::{
+  collections::HashMap,
+  fmt::Debug,
+  hash::Hash,
+  rc::Rc,
+  sync::{Arc, Mutex, mpsc},
+  thread,
+  time::Duration,
+  vec,
+};
 
 use chrono::{DateTime, TimeDelta, Utc};
 use ratatui::{
@@ -26,7 +35,7 @@ use crate::update::*;
 // #[derive(Debug, Default)]
 pub struct Model {
   running_state: RunningState,
-  mode: Mode,
+  mode: Arc<Mutex<Mode>>,
   contacts: Contacts,
   // groups: Vec<Group,
   chats: Vec<Chat>,
@@ -121,7 +130,7 @@ pub struct Contact {
   // icon: Image,
 }
 
-type Contacts = Rc<HashMap<PhoneNumber, Contact>>;
+type Contacts = Arc<HashMap<PhoneNumber, Contact>>;
 
 #[derive(Debug, Default)]
 pub struct Chat {
@@ -232,10 +241,10 @@ impl Model {
 
     let model = Model {
       chat_index: 0,
-      contacts: Rc::new(contacts),
+      contacts: Arc::new(contacts),
       chats: vec![chat],
       running_state: RunningState::Running,
-      mode: Mode::Normal,
+      mode: Arc::new(Mutex::new(Mode::Normal)),
     };
     // let mut model = Model::default();
     // model.contacts = contacts;
@@ -351,19 +360,19 @@ impl Message {
 
   // i thought i knew how lifetimes worked
   fn format_delivered_status(&self) -> Line<'_> {
-    let check_icon = "";
+    let check_icon = " ";
 
     return match &self.metadata {
       Metadata::NotMyMessage(_) => Line::from(""),
       Metadata::MyMessage(x) => {
         if x.all_read() {
           Line::from(Span::styled(
-            [check_icon, " ", check_icon].concat(),
+            [check_icon, check_icon].concat(),
             Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
           ))
         } else if x.all_delivered() {
           Line::from(Span::styled(
-            [check_icon, " ", check_icon].concat(),
+            [check_icon, check_icon].concat(),
             Style::default().fg(Color::Gray),
           ))
         } else if x.sent() {
@@ -675,17 +684,27 @@ fn main() -> color_eyre::Result<()> {
   let mut terminal = ratatui::init();
   let mut model = Model::init();
   let settings = &Settings::init();
+  let (action_tx, action_rx) = mpsc::channel();
 
   // regular lumber jack
   let logger = &mut Logger::init("log.txt");
   Logger::log("testing".to_string());
+
+  let mode = Arc::clone(&model.mode);
+  thread::spawn(move || {
+    loop {
+      if let Ok(message) = handle_event(&mode) {
+        action_tx.send(message);
+      }
+    }
+  });
 
   while model.running_state != RunningState::OhShit {
     // Render the current view
     terminal.draw(|f| view(&mut model, f, settings))?;
 
     // Handle events and map to a Message
-    let mut current_msg = handle_event(&model)?;
+    let mut current_msg = action_rx.recv()?;
 
     // Process updates as long as they return a non-None message
     while current_msg.is_some() {
@@ -748,7 +767,7 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
     index += 1;
   }
 
-  let contacts = Rc::clone(&model.contacts);
+  let contacts = Arc::clone(&model.contacts);
   model
     .current_chat()
     .render(layout[1], frame.buffer_mut(), settings, contacts);

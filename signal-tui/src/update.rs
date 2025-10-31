@@ -19,19 +19,19 @@ pub enum Action {
 /// but you might need it as your project evolves
 ///
 /// (the project evolved (pokemon core))
-pub fn handle_event(model: &Model) -> color_eyre::Result<Option<Action>> {
+pub fn handle_event(mode: &Arc<Mutex<Mode>>) -> color_eyre::Result<Option<Action>> {
   if event::poll(Duration::from_millis(250))? {
     if let Event::Key(key) = event::read()? {
       if key.kind == event::KeyEventKind::Press {
-        return Ok(handle_key(key, model));
+        return Ok(handle_key(key, mode));
       }
     }
   }
   Ok(None)
 }
 
-pub fn handle_key(key: event::KeyEvent, model: &Model) -> Option<Action> {
-  match model.mode {
+pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Action> {
+  match *mode.lock().unwrap() {
     Mode::Insert => match key.code {
       KeyCode::Esc => Some(Action::SetMode(Mode::Normal)),
       KeyCode::Char(char) => Some(Action::Type(char)),
@@ -62,7 +62,7 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
 
     Action::Scroll(lines) => model.current_chat().location.requested_scroll = lines,
 
-    Action::SetMode(new_mode) => model.mode = new_mode,
+    Action::SetMode(new_mode) => *model.mode.lock().unwrap() = new_mode,
 
     Action::Quit => {
       // You can handle cleanup and exit here
