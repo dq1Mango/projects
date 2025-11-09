@@ -1,5 +1,6 @@
 mod logger;
 mod multi_line_string;
+mod signal;
 #[cfg(test)]
 mod tests;
 
@@ -9,9 +10,7 @@ use std::{
   collections::HashMap,
   fmt::Debug,
   hash::Hash,
-  rc::Rc,
   sync::{Arc, Mutex, mpsc},
-  time::Duration,
   vec,
 };
 
@@ -29,6 +28,7 @@ use ratatui::{
 
 use crate::logger::Logger;
 use crate::multi_line_string::MultiLineString;
+use crate::signal::*;
 use crate::update::*;
 
 // #[derive(Debug, Default)]
