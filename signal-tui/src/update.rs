@@ -1,7 +1,11 @@
+use std::sync::mpsc::Sender;
+
 use crate::logger::Logger;
 use crate::*;
 use color_eyre;
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event, EventStream, KeyCode};
+
+use futures::{StreamExt, future::FutureExt, select};
 
 #[derive(PartialEq)]
 pub enum Action {
@@ -19,15 +23,26 @@ pub enum Action {
 /// but you might need it as your project evolves
 ///
 /// (the project evolved (pokemon core))
-pub fn handle_event(mode: &Arc<Mutex<Mode>>) -> color_eyre::Result<Option<Action>> {
-  if event::poll(Duration::from_millis(250))? {
-    if let Event::Key(key) = event::read()? {
-      if key.kind == event::KeyEventKind::Press {
-        return Ok(handle_key(key, mode));
-      }
+pub async fn handle_crossterm_events(tx: Sender<Action>, mode: &Arc<Mutex<Mode>>) {
+  let mut reader = EventStream::new();
+
+  loop {
+    let event = reader.next().fuse().await;
+    match event {
+      Some(Ok(event)) => match event {
+        Event::Key(key) => {
+          if key.kind == event::KeyEventKind::Press {
+            if let Some(action) = handle_key(key, mode) {
+              let err = tx.send(action);
+            }
+          }
+        }
+        _ => {}
+      },
+      Some(Err(err)) => Logger::log(format!("Error reading event: {err} ")),
+      None => Logger::log(format!("I dont think this should ever happend")),
     }
   }
-  Ok(None)
 }
 
 pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Action> {

@@ -11,7 +11,6 @@ use std::{
   hash::Hash,
   rc::Rc,
   sync::{Arc, Mutex, mpsc},
-  thread,
   time::Duration,
   vec,
 };
@@ -679,7 +678,8 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
 // /
 
 // main ---
-fn main() -> color_eyre::Result<()> {
+#[tokio::main]
+async fn main() -> color_eyre::Result<()> {
   // tui::install_panic_hook();
   let mut terminal = ratatui::init();
   let mut model = Model::init();
@@ -691,12 +691,8 @@ fn main() -> color_eyre::Result<()> {
   Logger::log("testing".to_string());
 
   let mode = Arc::clone(&model.mode);
-  thread::spawn(move || {
-    loop {
-      if let Ok(message) = handle_event(&mode) {
-        action_tx.send(message);
-      }
-    }
+  let updater = tokio::spawn(async move {
+    handle_crossterm_events(action_tx, &mode).await;
   });
 
   while model.running_state != RunningState::OhShit {
@@ -704,7 +700,7 @@ fn main() -> color_eyre::Result<()> {
     terminal.draw(|f| view(&mut model, f, settings))?;
 
     // Handle events and map to a Message
-    let mut current_msg = action_rx.recv()?;
+    let mut current_msg = Some(action_rx.recv()?);
 
     // Process updates as long as they return a non-None message
     while current_msg.is_some() {
@@ -712,6 +708,8 @@ fn main() -> color_eyre::Result<()> {
     }
   }
 
+  updater.abort();
+  // updater.await.unwrap_err();
   ratatui::restore();
   Ok(())
 }
