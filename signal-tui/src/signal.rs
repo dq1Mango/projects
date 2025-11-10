@@ -234,11 +234,12 @@ async fn init(rx: Receiver<Cmd>) -> anyhow::Result<()> {
   };
 
   debug!(sqlite_db_path, "opening config database");
-  let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
+  // let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
 
   loop {
+    let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
     let cmd = rx.recv()?;
-    run(cmd, &mut config_store).await?
+    run(cmd, config_store).await?
   }
 
   Ok(())
