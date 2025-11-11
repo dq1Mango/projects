@@ -1,5 +1,5 @@
 mod logger;
-mod multi_line_string;
+mod model;
 mod signal;
 #[cfg(test)]
 mod tests;
@@ -27,8 +27,8 @@ use ratatui::{
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
-use crate::multi_line_string::MultiLineString;
-use crate::signal::*;
+use crate::model::MultiLineString;
+// use crate::signal::*;
 use crate::update::*;
 
 // #[derive(Debug, Default)]
