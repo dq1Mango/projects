@@ -15,6 +15,8 @@ use std::{
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
+use presage::store::StateStore;
+use presage_store_sqlite::{OnNewIdentity, SqliteStore};
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -24,6 +26,7 @@ use ratatui::{
   text::{Line, Span},
   widgets::{Block, Paragraph, Widget},
 };
+use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
@@ -35,10 +38,12 @@ use crate::update::*;
 pub struct Model {
   running_state: RunningState,
   mode: Arc<Mutex<Mode>>,
+  focus: Focus,
   contacts: Contacts,
   // groups: Vec<Group,
   chats: Vec<Chat>,
   chat_index: usize,
+  account: Account,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -53,6 +58,13 @@ pub enum Mode {
   #[default]
   Normal,
   Insert,
+}
+
+#[derive(Default, Debug, PartialEq)]
+pub enum Focus {
+  #[default]
+  Chats,
+  Settings,
 }
 
 // #[derive(Debug, Default)]
@@ -153,6 +165,12 @@ pub struct Settings {
   _identity: String,
 }
 
+struct Account {
+  name: String,
+  username: String,
+  number: PhoneNumber,
+}
+
 impl Settings {
   fn init() -> Self {
     Self {
@@ -238,12 +256,20 @@ impl Model {
       },
     );
 
+    let account = Account {
+      name: "anonymouse".to_string(),
+      username: "mqngo".to_string(),
+      number: PhoneNumber("67420".to_string()),
+    };
+
     let model = Model {
       chat_index: 0,
       contacts: Arc::new(contacts),
       chats: vec![chat],
+      account: account,
       running_state: RunningState::Running,
       mode: Arc::new(Mutex::new(Mode::Normal)),
+      focus: Focus::Chats,
     };
     // let mut model = Model::default();
     // model.contacts = contacts;
@@ -677,23 +703,136 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
 // }
 // /
 
+use crate::signal::Cmd;
+use crate::signal::default_db_path;
+use crate::signal::link_device;
+use presage::libsignal_service::configuration::SignalServers;
+use qrcodegen::QrCode;
+use qrcodegen::QrCodeEcc;
+
+pub struct LinkState {
+  url: Option<Url>,
+}
+
+pub enum LinkingAction {
+  Url(Url),
+  Success,
+  Fail,
+}
+
+fn one_by_one_area(x: u16, y: u16) -> Rect {
+  Rect {
+    x: x,
+    y: y,
+    width: 1,
+    height: 1,
+  }
+}
+
+fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
+  let block = "█";
+
+  let area = frame.area();
+  let buffer = frame.buffer_mut();
+
+  let area = pad_with_border(area, buffer);
+
+  let mut size: u16 = 1;
+
+  match &state.url {
+    Some(url) => {
+      let qr = QrCode::encode_text(&url.to_string(), QrCodeEcc::Medium);
+
+      match qr {
+        Ok(qr) => {
+          size = qr.size() as u16;
+          for y in 0..qr.size() {
+            for x in 0..qr.size() {
+              Span::styled(
+                block,
+                Style::default().fg(match qr.get_module(x, y) {
+                  true => Color::Black,
+                  false => Color::White,
+                }),
+              )
+              .render(one_by_one_area(area.x + x as u16, area.y + y as u16), buffer);
+              // (... paint qr.get_module(x, y) ...)
+            }
+          }
+        }
+
+        Err(_) => Line::from("Error generating qrcode (tough shit pal)").render(area, buffer),
+      }
+      let raw_url = vec![Line::from("Or visit the raw url:"), Line::from(url.to_string())];
+      Paragraph::new(raw_url).render(
+        Rect {
+          x: area.x,
+          y: area.y + size,
+          width: area.width,
+          height: area.height - size,
+        },
+        buffer,
+      );
+    }
+
+    None => Line::from("Generating Linking Url ...").render(area, buffer),
+  }
+}
+
 // main ---
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
   // tui::install_panic_hook();
   let mut terminal = ratatui::init();
+
+  let db_path = default_db_path();
+  let config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust).await?;
+
+  if !config_store.is_registered().await {
+    let mut linking_model = LinkState { url: None };
+
+    let (linking_action_tx, linking_action_rx) = mpsc::channel();
+    while !config_store.is_registered().await {
+      terminal.draw(|f| draw_linking_screen(&linking_model, f))?;
+
+      // Handle events and map to a Message
+      let current_msg = linking_action_rx.recv()?;
+
+      match current_msg {
+        LinkingAction::Url(url) => linking_model.url = Some(url),
+        LinkingAction::Success => break,
+        LinkingAction::Fail => {
+          let new_linking_tx = linking_action_tx.clone();
+          tokio::spawn(async move {
+            link_device(
+              Cmd::LinkDevice {
+                servers: SignalServers::Production,
+                device_name: "terminal enjoyer".to_string(),
+              },
+              config_store.clone(),
+              new_linking_tx,
+            )
+            .await;
+          });
+        }
+      }
+    }
+  }
+
+  let (action_tx, action_rx) = mpsc::channel();
+
   let mut model = Model::init();
   let settings = &Settings::init();
-  let (action_tx, action_rx) = mpsc::channel();
+
+  let mode = Arc::clone(&model.mode);
+
+  let updater = tokio::spawn(async move {
+    handle_crossterm_events(action_tx, &mode).await;
+  });
 
   // regular lumber jack
   let logger = &mut Logger::init("log.txt");
   Logger::log("testing".to_string());
-
-  let mode = Arc::clone(&model.mode);
-  let updater = tokio::spawn(async move {
-    handle_crossterm_events(action_tx, &mode).await;
-  });
 
   while model.running_state != RunningState::OhShit {
     // Render the current view
@@ -765,12 +904,21 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
     index += 1;
   }
 
+  // wow im good at coding
   let contacts = Arc::clone(&model.contacts);
-  model
-    .current_chat()
-    .render(layout[1], frame.buffer_mut(), settings, contacts);
 
-  frame.set_cursor_position(model.current_chat().text_input.cursor_position);
+  match model.focus {
+    Focus::Chats => {
+      model
+        .current_chat()
+        .render(layout[1], frame.buffer_mut(), settings, contacts);
+
+      frame.set_cursor_position(model.current_chat().text_input.cursor_position);
+    }
+    Focus::Settings => {
+      render_settings(layout[1], frame.buffer_mut(), settings, &model.account);
+    }
+  }
 
   //
   // frame.render_widget(
@@ -783,4 +931,33 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
   //
   // let test_rect = Rect::new(10, 10, 7, 20);
   // frame.render_widget(p, test_rect);
+}
+
+fn pad_with_border(area: Rect, buf: &mut Buffer) -> Rect {
+  Block::bordered().border_set(border::THICK).render(area, buf);
+
+  Rect {
+    x: area.x + 1,
+    y: area.y + 1,
+    width: area.width - 2,
+    height: area.height - 2,
+  }
+
+  // area.x += 1;
+  // area.y += 1;
+  // area.width -= 2;
+  // area.height -= 2;
+  // area
+}
+
+fn render_settings(area: Rect, buf: &mut Buffer, _settings: &Settings, account: &Account) {
+  let area = pad_with_border(area, buf);
+
+  let info = vec![
+    Line::from("Name: ".to_string() + &account.name),
+    Line::from("Username: ".to_string() + &account.username),
+    Line::from("Number: ".to_string() + &account.number.0),
+  ];
+
+  Paragraph::new(info).render(area, buf);
 }

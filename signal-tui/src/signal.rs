@@ -1,7 +1,10 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use std::time::UNIX_EPOCH;
 
@@ -9,6 +12,7 @@ use anyhow::{Context as _, anyhow, bail};
 use base64::prelude::*;
 use chrono::Local;
 use directories::ProjectDirs;
+use futures::SinkExt;
 use futures::StreamExt;
 use futures::{channel::oneshot, future, pin_mut};
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
@@ -67,7 +71,7 @@ use url::Url;
 //     subcommand: Cmd,
 // }
 
-enum Cmd {
+pub enum Cmd {
   // #[clap(about = "Register using a phone number")]
   Register {
     // #[clap(long = "servers", short = 's', default_value = "staging")]
@@ -220,18 +224,20 @@ fn attachments_tmp_dir() -> anyhow::Result<TempDir> {
 //   Args::parse()
 // }
 
+pub fn default_db_path() -> String {
+  ProjectDirs::from("org", "whisperfish", "presage")
+    .unwrap()
+    .config_dir()
+    .join("cli.db3")
+    .display()
+    .to_string()
+}
+
 // #[tokio::main(flavor = "multi_thread")]
 async fn init(rx: Receiver<Cmd>) -> anyhow::Result<()> {
   // let args = init();
 
-  let sqlite_db_path = {
-    ProjectDirs::from("org", "whisperfish", "presage")
-      .unwrap()
-      .config_dir()
-      .join("cli.db3")
-      .display()
-      .to_string()
-  };
+  let sqlite_db_path = default_db_path();
 
   debug!(sqlite_db_path, "opening config database");
   // let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
@@ -527,6 +533,40 @@ async fn receive<S: Store>(manager: &mut Manager<S, Registered>, notifications: 
   }
 
   Ok(())
+}
+
+use crate::LinkingAction;
+
+pub async fn link_device<S: Store>(data: Cmd, config_store: S, mut sender: Sender<LinkingAction>) {
+  if let Cmd::LinkDevice { servers, device_name } = data {
+    let (provisioning_link_tx, provisioning_link_rx) = oneshot::channel();
+    let mut sender1 = sender.clone();
+    let manager = future::join(
+      Manager::link_secondary_device(config_store, servers, device_name.clone(), provisioning_link_tx),
+      async move {
+        match provisioning_link_rx.await {
+          Ok(url) => {
+            sender1.send(LinkingAction::Url(url));
+          }
+          Err(error) => error!(%error, "linking device was cancelled"),
+        }
+      },
+    )
+    .await;
+
+    match manager {
+      (Ok(manager), _) => {
+        sender.send(LinkingAction::Success);
+        // let whoami = manager.whoami().await.unwrap();
+        // println!("{whoami:?}");
+      }
+      (Err(err), _) => {
+        sender.send(LinkingAction::Fail);
+        // println!("{err:?}");
+      }
+    }
+  } else {
+  }
 }
 
 async fn run<S: Store>(subcommand: Cmd, config_store: S) -> anyhow::Result<()> {

@@ -1,11 +1,12 @@
 use std::sync::mpsc::Sender;
 
-use crate::logger::Logger;
-use crate::*;
 use color_eyre;
 use crossterm::event::{self, Event, EventStream, KeyCode};
 
 use futures::{StreamExt, future::FutureExt, select};
+
+use crate::logger::Logger;
+use crate::*;
 
 #[derive(PartialEq)]
 pub enum Action {
@@ -14,6 +15,7 @@ pub enum Action {
   Scroll(i16),
 
   SetMode(Mode),
+  SetFocus(Focus),
 
   Quit,
 }
@@ -61,6 +63,8 @@ pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Actio
       KeyCode::Char('u') => Some(Action::Scroll(10)),
 
       KeyCode::Char('i') => Some(Action::SetMode(Mode::Insert)),
+      KeyCode::Char('S') => Some(Action::SetFocus(Focus::Settings)),
+      KeyCode::Char('C') => Some(Action::SetFocus(Focus::Chats)),
       // KeyCode::Char('k') => Some(Action::Decrement),
       KeyCode::Char('q') => Some(Action::Quit),
       _ => None,
@@ -78,6 +82,8 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
     Action::Scroll(lines) => model.current_chat().location.requested_scroll = lines,
 
     Action::SetMode(new_mode) => *model.mode.lock().unwrap() = new_mode,
+
+    Action::SetFocus(new_focus) => model.focus = new_focus,
 
     Action::Quit => {
       // You can handle cleanup and exit here
