@@ -1,5 +1,6 @@
 mod logger;
 mod model;
+mod mysignal;
 mod signal;
 #[cfg(test)]
 mod tests;
@@ -10,12 +11,14 @@ use std::{
   collections::HashMap,
   fmt::Debug,
   hash::Hash,
-  sync::{Arc, Mutex, mpsc},
+  sync::{Arc, Mutex},
+  thread,
+  time::Duration,
   vec,
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
-use presage::store::StateStore;
+use presage::store::{StateStore, Store};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
 use ratatui::{
   Frame,
@@ -26,12 +29,19 @@ use ratatui::{
   text::{Line, Span},
   widgets::{Block, Paragraph, Widget},
 };
+use tokio::{
+  runtime::Builder,
+  sync::mpsc,
+  task::{self, LocalSet},
+  time::sleep,
+};
 use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
 use crate::model::MultiLineString;
 // use crate::signal::*;
+use crate::mysignal::*;
 use crate::update::*;
 
 // #[derive(Debug, Default)]
@@ -705,7 +715,7 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
 
 use crate::signal::Cmd;
 use crate::signal::default_db_path;
-use crate::signal::link_device;
+use crate::update::LinkingAction;
 use presage::libsignal_service::configuration::SignalServers;
 use qrcodegen::QrCode;
 use qrcodegen::QrCodeEcc;
@@ -714,23 +724,17 @@ pub struct LinkState {
   url: Option<Url>,
 }
 
-pub enum LinkingAction {
-  Url(Url),
-  Success,
-  Fail,
-}
-
-fn one_by_one_area(x: u16, y: u16) -> Rect {
+fn one_by_two_area(x: u16, y: u16) -> Rect {
   Rect {
-    x: x,
+    x: 2 * x,
     y: y,
-    width: 1,
+    width: 2,
     height: 1,
   }
 }
 
 fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
-  let block = "█";
+  let block = "██";
 
   let area = frame.area();
   let buffer = frame.buffer_mut();
@@ -755,7 +759,7 @@ fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
                   false => Color::White,
                 }),
               )
-              .render(one_by_one_area(area.x + x as u16, area.y + y as u16), buffer);
+              .render(one_by_two_area(area.x + x as u16, area.y + y as u16), buffer);
               // (... paint qr.get_module(x, y) ...)
             }
           }
@@ -779,47 +783,75 @@ fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
   }
 }
 
+use crate::mysignal::SignalSpawner;
+
 // main ---
-#[tokio::main]
-async fn main() -> color_eyre::Result<()> {
+async fn real_main() -> color_eyre::Result<()> {
+  // regular lumber jack
+  let logger = &mut Logger::init("log.txt");
+  Logger::log("testing".to_string());
+
   // tui::install_panic_hook();
   let mut terminal = ratatui::init();
+  let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
-  let db_path = default_db_path();
+  let spawner = SignalSpawner::new(action_tx.clone());
+
+  // let db_path = default_db_path();
+  let db_path = "/home/mqngo/Coding/rust/signal-tui/plzwork.db3";
   let config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust).await?;
 
   if !config_store.is_registered().await {
     let mut linking_model = LinkState { url: None };
 
-    let (linking_action_tx, linking_action_rx) = mpsc::channel();
-    while !config_store.is_registered().await {
+    spawner.spawn(Cmd::LinkDevice {
+      servers: SignalServers::Production,
+      device_name: "terminal enjoyer".to_string(),
+    });
+    Logger::log(format!("we spawned the url maker thingy idk i wanna sleep"));
+
+    // let (linking_action_tx, linking_action_rx) = mpsc::channel();
+
+    loop {
       terminal.draw(|f| draw_linking_screen(&linking_model, f))?;
+      Logger::log(format!("we drew da screen"));
 
       // Handle events and map to a Message
-      let current_msg = linking_action_rx.recv()?;
+      let current_msg = action_rx.recv().await;
 
+      Logger::log(format!("we gyatt a message"));
       match current_msg {
-        LinkingAction::Url(url) => linking_model.url = Some(url),
-        LinkingAction::Success => break,
-        LinkingAction::Fail => {
-          let new_linking_tx = linking_action_tx.clone();
-          tokio::spawn(async move {
-            link_device(
-              Cmd::LinkDevice {
-                servers: SignalServers::Production,
-                device_name: "terminal enjoyer".to_string(),
-              },
-              config_store.clone(),
-              new_linking_tx,
-            )
-            .await;
-          });
+        Some(Action::Link(linking)) => match linking {
+          LinkingAction::Url(url) => linking_model.url = Some(url),
+          LinkingAction::Success => break,
+          LinkingAction::Fail => spawner.spawn(Cmd::LinkDevice {
+            servers: SignalServers::Production,
+            device_name: "terminal enjoyer".to_string(),
+          }),
+        },
+
+        Some(Action::Quit) => {
+          return Ok(());
         }
+
+        Some(_) => {}
+
+        None => {
+          Logger::log("I dont think this should ever happenn".to_string());
+        } // local.spawn_local(async move {
+          //   let i_dont_get_it = link_device(
+          //     Cmd::LinkDevice {
+          //       servers: SignalServers::Production,
+          //       device_name: "terminal enjoyer".to_string(),
+          //     },
+          //     cloned_store,
+          //     new_linking_tx,
+          //   )
+          //   .await;
+          // });
       }
     }
   }
-
-  let (action_tx, action_rx) = mpsc::channel();
 
   let mut model = Model::init();
   let settings = &Settings::init();
@@ -830,16 +862,12 @@ async fn main() -> color_eyre::Result<()> {
     handle_crossterm_events(action_tx, &mode).await;
   });
 
-  // regular lumber jack
-  let logger = &mut Logger::init("log.txt");
-  Logger::log("testing".to_string());
-
   while model.running_state != RunningState::OhShit {
     // Render the current view
     terminal.draw(|f| view(&mut model, f, settings))?;
 
     // Handle events and map to a Message
-    let mut current_msg = Some(action_rx.recv()?);
+    let mut current_msg = action_rx.recv().await;
 
     // Process updates as long as they return a non-None message
     while current_msg.is_some() {
@@ -849,8 +877,20 @@ async fn main() -> color_eyre::Result<()> {
 
   updater.abort();
   // updater.await.unwrap_err();
-  ratatui::restore();
   Ok(())
+}
+
+// main ---
+#[tokio::main]
+async fn main() {
+  let result = real_main().await;
+
+  ratatui::restore();
+
+  match result {
+    Ok(_) => Logger::log(format!("we are a-okay")),
+    Err(_) => Logger::log(format!("we are NYAT a-okay")),
+  }
 }
 
 // TODO: gotta figure out how to model chat state

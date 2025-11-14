@@ -4,7 +4,6 @@
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use std::time::UNIX_EPOCH;
 
@@ -46,14 +45,17 @@ use presage::{
 use presage_store_sqlite::SqliteStore;
 use tempfile::Builder;
 use tempfile::TempDir;
+use tokio::time::sleep;
 use tokio::{
   fs,
-  io::{self, AsyncBufReadExt, BufReader},
+  sync::mpsc,
+  // io::{self, AsyncBufReadExt, BufReader},
 };
 use tracing::warn;
 use tracing::{debug, error, info};
 use url::Url;
 
+use crate::logger::Logger;
 // #[derive(Parser)]
 // #[clap(about = "a basic signal CLI to try things out")]
 // struct Args {
@@ -234,22 +236,22 @@ pub fn default_db_path() -> String {
 }
 
 // #[tokio::main(flavor = "multi_thread")]
-async fn init(rx: Receiver<Cmd>) -> anyhow::Result<()> {
-  // let args = init();
-
-  let sqlite_db_path = default_db_path();
-
-  debug!(sqlite_db_path, "opening config database");
-  // let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
-
-  loop {
-    let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
-    let cmd = rx.recv()?;
-    run(cmd, config_store).await?
-  }
-
-  Ok(())
-}
+// async fn init(rx: Receiver<Cmd>) -> anyhow::Result<()> {
+//   // let args = init();
+//
+//   let sqlite_db_path = default_db_path();
+//
+//   debug!(sqlite_db_path, "opening config database");
+//   // let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
+//
+//   loop {
+//     let config_store = SqliteStore::open_with_passphrase(&sqlite_db_path, "secret".into(), OnNewIdentity::Trust).await?;
+//     let cmd = rx.recv()?;
+//     run(cmd, config_store).await?
+//   }
+//
+//   Ok(())
+// }
 
 async fn send<S: Store>(
   manager: &mut Manager<S, Registered>,
@@ -280,7 +282,9 @@ async fn send<S: Store>(
     match content {
       Received::QueueEmpty => break,
       Received::Contacts => continue,
-      Received::Content(content) => process_incoming_message(manager, attachments_tmp_dir.path(), false, &content).await,
+      Received::Content(content) => {
+        process_incoming_message(manager, attachments_tmp_dir.path(), false, &content).await
+      }
     }
   }
 
@@ -535,41 +539,52 @@ async fn receive<S: Store>(manager: &mut Manager<S, Registered>, notifications: 
   Ok(())
 }
 
-use crate::LinkingAction;
+// pub async fn _link_device<S: Store>(data: Cmd, config_store: S, sender: Sender<LinkingAction>) -> anyhow::Result<()> {
+//   Logger::log(format!("surely we make it here right 0?"));
+//   if let Cmd::LinkDevice { servers, device_name } = data {
+//     let (provisioning_link_tx, provisioning_link_rx) = oneshot::channel();
+//     Logger::log(format!("surely we make it here right 1?"));
+//     let sender1 = sender.clone();
+//     let manager = future::join(
+//       Manager::link_secondary_device(config_store, servers, device_name.clone(), provisioning_link_tx),
+//       async move {
+//         match provisioning_link_rx.await {
+//           Ok(url) => {
+//             sender1.send(LinkingAction::Url(url));
+//           }
+//           Err(error) => error!(%error, "linking device was cancelled"),
+//         }
+//       },
+//     )
+//     .await;
+//     Logger::log(format!("surely we make it here right 2?"));
+//
+//     match manager {
+//       (Ok(manager), _) => {
+//         sender.send(LinkingAction::Success);
+//         // let whoami = manager.whoami().await.unwrap();
+//         // println!("{whoami:?}");
+//       }
+//       (Err(err), _) => {
+//         sender.send(LinkingAction::Success);
+//         // println!("{err:?}");
+//       }
+//     }
+//   } else {
+//   }
+//
+//   Logger::log(format!("surely we make it here right?"));
+//   Ok(())
+// }
 
-pub async fn link_device<S: Store>(data: Cmd, config_store: S, mut sender: Sender<LinkingAction>) {
-  if let Cmd::LinkDevice { servers, device_name } = data {
-    let (provisioning_link_tx, provisioning_link_rx) = oneshot::channel();
-    let mut sender1 = sender.clone();
-    let manager = future::join(
-      Manager::link_secondary_device(config_store, servers, device_name.clone(), provisioning_link_tx),
-      async move {
-        match provisioning_link_rx.await {
-          Ok(url) => {
-            sender1.send(LinkingAction::Url(url));
-          }
-          Err(error) => error!(%error, "linking device was cancelled"),
-        }
-      },
-    )
-    .await;
+use crate::update::Action;
+use crate::update::LinkingAction;
 
-    match manager {
-      (Ok(manager), _) => {
-        sender.send(LinkingAction::Success);
-        // let whoami = manager.whoami().await.unwrap();
-        // println!("{whoami:?}");
-      }
-      (Err(err), _) => {
-        sender.send(LinkingAction::Fail);
-        // println!("{err:?}");
-      }
-    }
-  } else {
-  }
-}
-
-async fn run<S: Store>(subcommand: Cmd, config_store: S) -> anyhow::Result<()> {
+pub async fn run<S: Store>(
+  subcommand: Cmd,
+  config_store: S,
+  output: mpsc::UnboundedSender<Action>,
+) -> anyhow::Result<()> {
   match subcommand {
     Cmd::Register {
       servers,
@@ -602,30 +617,36 @@ async fn run<S: Store>(subcommand: Cmd, config_store: S) -> anyhow::Result<()> {
     //     );
     //   }
     // }
+    //
     Cmd::LinkDevice { servers, device_name } => {
       let (provisioning_link_tx, provisioning_link_rx) = oneshot::channel();
+      let output1 = output.clone();
+      Logger::log(format!("about to send something, but gonna sleep a little first"));
+      sleep(Duration::from_secs(2)).await;
       let manager = future::join(
-        Manager::link_secondary_device(config_store, servers, device_name.clone(), provisioning_link_tx),
+        Manager::link_secondary_device(config_store, servers, device_name, provisioning_link_tx),
         async move {
+          Logger::log(format!("about to send something, feeling nervous"));
           match provisioning_link_rx.await {
             Ok(url) => {
-              println!("Please scan in the QR code:");
-              // qr2term::print_qr(url.to_string()).expect("failed to render qrcode");
-              println!("Alternatively, use the URL: {}", url);
+              output1.send(Action::Link(LinkingAction::Url(url)));
             }
             Err(error) => error!(%error, "linking device was cancelled"),
           }
         },
       )
       .await;
+      Logger::log(format!("i think it worked !!"));
 
       match manager {
         (Ok(manager), _) => {
-          let whoami = manager.whoami().await.unwrap();
-          println!("{whoami:?}");
+          output.send(Action::Link(LinkingAction::Success));
+          // let whoami = manager.whoami().await.unwrap();
+          // println!("{whoami:?}");
         }
         (Err(err), _) => {
-          println!("{err:?}");
+          output.send(Action::Link(LinkingAction::Success));
+          // println!("{err:?}");
         }
       }
     }
