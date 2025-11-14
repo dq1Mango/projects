@@ -1,12 +1,18 @@
-use std::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 
-use color_eyre;
 use crossterm::event::{self, Event, EventStream, KeyCode};
 
-use futures::{StreamExt, future::FutureExt, select};
+use futures::{StreamExt, future::FutureExt};
 
 use crate::logger::Logger;
 use crate::*;
+
+#[derive(PartialEq)]
+pub enum LinkingAction {
+  Url(Url),
+  Success,
+  Fail,
+}
 
 #[derive(PartialEq)]
 pub enum Action {
@@ -17,6 +23,8 @@ pub enum Action {
   SetMode(Mode),
   SetFocus(Focus),
 
+  Link(LinkingAction),
+
   Quit,
 }
 /// Convert Event to Action
@@ -25,7 +33,7 @@ pub enum Action {
 /// but you might need it as your project evolves
 ///
 /// (the project evolved (pokemon core))
-pub async fn handle_crossterm_events(tx: Sender<Action>, mode: &Arc<Mutex<Mode>>) {
+pub async fn handle_crossterm_events(tx: UnboundedSender<Action>, mode: &Arc<Mutex<Mode>>) {
   let mut reader = EventStream::new();
 
   loop {
@@ -90,7 +98,10 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
       // -- im ok thanks tho
       model.running_state = RunningState::OhShit;
     }
+
+    _ => {}
   };
+
   None
 }
 
