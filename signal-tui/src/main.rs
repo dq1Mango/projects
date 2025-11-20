@@ -16,6 +16,7 @@ use std::{
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
+use presage::model::messages::Received;
 use presage::store::{StateStore, Store};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
 use ratatui::{
@@ -27,12 +28,21 @@ use ratatui::{
   text::{Line, Span},
   widgets::{Block, Paragraph, Widget},
 };
-use tokio::{sync::mpsc, task};
+use tokio::{
+  sync::mpsc,
+  task::{self, spawn_local},
+};
 use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
 use crate::model::MultiLineString;
+use crate::signal::Cmd;
+use crate::signal::default_db_path;
+use crate::update::LinkingAction;
+use presage::libsignal_service::configuration::SignalServers;
+use qrcodegen::QrCode;
+use qrcodegen::QrCodeEcc;
 // use crate::signal::*;
 use crate::update::*;
 
@@ -47,6 +57,12 @@ pub struct Model {
   chat_index: usize,
   account: Account,
 }
+
+pub struct LinkState {
+  url: Option<Url>,
+}
+
+struct LoadState {}
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub enum RunningState {
@@ -705,17 +721,6 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
 // }
 // /
 
-use crate::signal::Cmd;
-use crate::signal::default_db_path;
-use crate::update::LinkingAction;
-use presage::libsignal_service::configuration::SignalServers;
-use qrcodegen::QrCode;
-use qrcodegen::QrCodeEcc;
-
-pub struct LinkState {
-  url: Option<Url>,
-}
-
 fn one_by_two_area(x: u16, y: u16) -> Rect {
   Rect {
     x: 2 * x,
@@ -775,6 +780,15 @@ fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
   }
 }
 
+fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
+  let area = frame.area();
+  let buffer = frame.buffer_mut();
+
+  let area = pad_with_border(area, buffer);
+
+  Line::from("Loading past messages ...").render(area, buffer);
+}
+
 use crate::mysignal::SignalSpawner;
 use crate::signal::run;
 
@@ -824,37 +838,6 @@ async fn real_main() -> color_eyre::Result<()> {
       device_name: "terminal enjoyer".to_string(),
     });
     //
-    // let (send, mut recv) = mpsc::unbounded_channel::<Cmd>();
-    //
-    // std::thread::spawn(move || {
-    //   let local = LocalSet::new();
-    //   local
-    //     .spawn_local(async move {
-    //       Logger::log(format!("getting REAL thready out here"));
-    //       let db_path = "/home/mqngo/Coding/rust/signal-tui/plzwork.db3";
-    //
-    //       // UNWRAPPING ERROR NOT PRODUCTION READY!!!
-    //       let config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust)
-    //         .await
-    //         .unwrap();
-    //
-    //       while let Some(new_task) = recv.recv().await {
-    //         Logger::log(format!("we gyatt a message but before"));
-    //         let cloned_output = output.clone();
-    //         let cloned_store = config_store.clone();
-    //         tokio::task::spawn_local(run(new_task, cloned_store, cloned_output));
-    //       }
-    //       // If the while loop returns, then all the LocalSpawner
-    //       // objects have been dropped.
-    //     })
-    //     .await;
-    // });
-    // Logger::log(format!("we spawned the url maker thingy idk i wanna sleep"));
-    // send.send(Cmd::LinkDevice {
-    //   servers: SignalServers::Production,
-    //   device_name: "terminal enjoyer".to_string(),
-    // })?;
-    // let (linking_action_tx, linking_action_rx) = mpsc::channel();
 
     loop {
       terminal.draw(|f| draw_linking_screen(&linking_model, f))?;
@@ -882,17 +865,34 @@ async fn real_main() -> color_eyre::Result<()> {
 
         None => {
           Logger::log("I dont think this should ever happenn".to_string());
-        } // local.spawn_local(async move {
-          //   let i_dont_get_it = link_device(
-          //     Cmd::LinkDevice {
-          //       servers: SignalServers::Production,
-          //       device_name: "terminal enjoyer".to_string(),
-          //     },
-          //     cloned_store,
-          //     new_linking_tx,
-          //   )
-          //   .await;
-          // });
+        }
+      }
+    }
+  }
+
+  spawner.spawn(Cmd::Receive { notifications: false });
+
+  let loading_model = LoadState {};
+  loop {
+    terminal.draw(|f| draw_loading_sreen(&loading_model, f))?;
+
+    let msg = action_rx.recv().await;
+
+    match msg {
+      Some(Action::Receive(receive)) => match receive {
+        Received::QueueEmpty => break,
+        Received::Contacts => Logger::log("we gyatt some contacts".to_string()),
+        Received::Content(content) => Logger::log("we gyatt some messages yippee".to_string()),
+      },
+
+      Some(Action::Quit) => {
+        return Ok(());
+      }
+
+      Some(_) => {}
+
+      None => {
+        Logger::log("I dont think this should ever happenn".to_string());
       }
     }
   }

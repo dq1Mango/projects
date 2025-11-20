@@ -37,7 +37,7 @@ use presage::store::ContentExt;
 use presage::{
   Manager,
   libsignal_service::content::{Content, ContentBody, DataMessage, GroupContextV2},
-  manager::{Registered, RegistrationOptions},
+  manager::Registered,
   store::{Store, Thread},
 };
 use tempfile::Builder;
@@ -323,7 +323,7 @@ async fn process_incoming_message<S: Store>(
   notifications: bool,
   content: &Content,
 ) {
-  print_message(manager, notifications, content).await;
+  // print_message(manager, notifications, content).await;
 
   let sender = content.metadata.sender.raw_uuid();
   if let ContentBody::DataMessage(DataMessage { attachments, .. }) = &content.body {
@@ -378,12 +378,11 @@ async fn print_message<S: Store>(manager: &Manager<S, Registered>, notifications
         ..
       } => Some(format!("Answer to message \"{quoted_text}\": {body}")),
       DataMessage {
-        reaction:
-          Some(Reaction {
-            target_sent_timestamp: Some(ts),
-            emoji: Some(emoji),
-            ..
-          }),
+        reaction: Some(Reaction {
+          target_sent_timestamp: Some(ts),
+          emoji: Some(emoji),
+          ..
+        }),
         ..
       } => {
         let Ok(Some(message)) = manager.store().message(thread, *ts).await else {
@@ -512,7 +511,11 @@ async fn print_message<S: Store>(manager: &Manager<S, Registered>, notifications
   }
 }
 
-async fn receive<S: Store>(manager: &mut Manager<S, Registered>, notifications: bool) -> anyhow::Result<()> {
+async fn receive<S: Store>(
+  manager: &mut Manager<S, Registered>,
+  notifications: bool,
+  output: mpsc::UnboundedSender<Action>,
+) -> anyhow::Result<()> {
   let attachments_tmp_dir = attachments_tmp_dir()?;
   let messages = manager
     .receive_messages()
@@ -521,13 +524,13 @@ async fn receive<S: Store>(manager: &mut Manager<S, Registered>, notifications: 
   pin_mut!(messages);
 
   while let Some(content) = messages.next().await {
-    match content {
-      Received::QueueEmpty => println!("done with synchronization"),
-      Received::Contacts => println!("got contacts synchronization"),
-      Received::Content(content) => {
-        process_incoming_message(manager, attachments_tmp_dir.path(), notifications, &content).await
-      }
+    match &content {
+      Received::QueueEmpty => {} //println!("done with synchronization"),
+      Received::Contacts => {}   //println!("got contacts synchronization"),
+      Received::Content(content) => process_incoming_message(manager, attachments_tmp_dir.path(), notifications, &content).await,
     }
+
+    _ = output.send(Action::Receive(content));
   }
 
   Ok(())
@@ -671,7 +674,7 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
     }
     Cmd::Receive { notifications } => {
       let mut manager = Manager::load_registered(config_store).await?;
-      receive(&mut manager, notifications).await?;
+      receive(&mut manager, notifications, output).await?;
     }
     Cmd::Send {
       uuid,
@@ -865,7 +868,7 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
         .await?
         .filter_map(Result::ok)
       {
-        print_message(&manager, false, &msg).await;
+        // print_message(&manager, false, &msg).await;
       }
     }
     Cmd::Stats => {
