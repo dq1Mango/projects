@@ -11,7 +11,6 @@ use anyhow::{Context as _, anyhow, bail};
 use base64::prelude::*;
 use chrono::Local;
 use directories::ProjectDirs;
-use futures::SinkExt;
 use futures::StreamExt;
 use futures::{channel::oneshot, future, pin_mut};
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
@@ -29,7 +28,6 @@ use presage::libsignal_service::sender::AttachmentSpec;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::model::contacts::Contact;
 use presage::model::groups::Group;
-use presage::model::identity::OnNewIdentity;
 use presage::model::messages::Received;
 use presage::proto::EditMessage;
 use presage::proto::ReceiptMessage;
@@ -42,7 +40,6 @@ use presage::{
   manager::{Registered, RegistrationOptions},
   store::{Store, Thread},
 };
-use presage_store_sqlite::SqliteStore;
 use tempfile::Builder;
 use tempfile::TempDir;
 use tokio::time::sleep;
@@ -52,7 +49,7 @@ use tokio::{
   // io::{self, AsyncBufReadExt, BufReader},
 };
 use tracing::warn;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 use url::Url;
 
 use crate::logger::Logger;
@@ -282,9 +279,7 @@ async fn send<S: Store>(
     match content {
       Received::QueueEmpty => break,
       Received::Contacts => continue,
-      Received::Content(content) => {
-        process_incoming_message(manager, attachments_tmp_dir.path(), false, &content).await
-      }
+      Received::Content(content) => process_incoming_message(manager, attachments_tmp_dir.path(), false, &content).await,
     }
   }
 
@@ -377,8 +372,7 @@ async fn print_message<S: Store>(manager: &Manager<S, Registered>, notifications
     match data_message {
       DataMessage {
         quote: Some(Quote {
-          text: Some(quoted_text),
-          ..
+          text: Some(quoted_text), ..
         }),
         body: Some(body),
         ..
@@ -580,11 +574,7 @@ async fn receive<S: Store>(manager: &mut Manager<S, Registered>, notifications: 
 use crate::update::Action;
 use crate::update::LinkingAction;
 
-pub async fn run<S: Store>(
-  subcommand: Cmd,
-  config_store: S,
-  output: mpsc::UnboundedSender<Action>,
-) -> anyhow::Result<()> {
+pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::UnboundedSender<Action>) -> anyhow::Result<()> {
   match subcommand {
     Cmd::Register {
       servers,
@@ -624,12 +614,16 @@ pub async fn run<S: Store>(
       Logger::log(format!("about to send something, but gonna sleep a little first"));
       sleep(Duration::from_secs(2)).await;
       let manager = future::join(
-        Manager::link_secondary_device(config_store, servers, device_name, provisioning_link_tx),
+        async move {
+          sleep(Duration::from_secs(2)).await;
+          Logger::log(format!("this isnt even my fault ..."));
+          Manager::link_secondary_device(config_store, servers, device_name, provisioning_link_tx).await
+        },
         async move {
           Logger::log(format!("about to send something, feeling nervous"));
           match provisioning_link_rx.await {
             Ok(url) => {
-              output1.send(Action::Link(LinkingAction::Url(url)));
+              _ = output1.send(Action::Link(LinkingAction::Url(url)));
             }
             Err(error) => error!(%error, "linking device was cancelled"),
           }
@@ -640,12 +634,12 @@ pub async fn run<S: Store>(
 
       match manager {
         (Ok(manager), _) => {
-          output.send(Action::Link(LinkingAction::Success));
+          _ = output.send(Action::Link(LinkingAction::Success));
           // let whoami = manager.whoami().await.unwrap();
           // println!("{whoami:?}");
         }
         (Err(err), _) => {
-          output.send(Action::Link(LinkingAction::Success));
+          _ = output.send(Action::Link(LinkingAction::Fail));
           // println!("{err:?}");
         }
       }
@@ -667,11 +661,7 @@ pub async fn run<S: Store>(
 
       for device in devices {
         let device_name = device.name.unwrap_or_else(|| "(no device name)".to_string());
-        let current_marker = if device.id == current_device_id {
-          "(this device)"
-        } else {
-          ""
-        };
+        let current_marker = if device.id == current_device_id { "(this device)" } else { "" };
 
         println!(
           "- Device {} {}\n  Name: {}\n  Created: {}\n  Last seen: {}",
@@ -953,11 +943,7 @@ async fn upload_attachments<S: Store>(
     })
     .collect();
 
-  let attachments: Result<Vec<_>, _> = manager
-    .upload_attachments(attachment_specs)
-    .await?
-    .into_iter()
-    .collect();
+  let attachments: Result<Vec<_>, _> = manager.upload_attachments(attachment_specs).await?.into_iter().collect();
 
   let attachments = attachments?;
   Ok(attachments)

@@ -12,8 +12,6 @@ use std::{
   fmt::Debug,
   hash::Hash,
   sync::{Arc, Mutex},
-  thread,
-  time::Duration,
   vec,
 };
 
@@ -29,19 +27,13 @@ use ratatui::{
   text::{Line, Span},
   widgets::{Block, Paragraph, Widget},
 };
-use tokio::{
-  runtime::Builder,
-  sync::mpsc,
-  task::{self, LocalSet},
-  time::sleep,
-};
+use tokio::{sync::mpsc, task};
 use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::logger::Logger;
 use crate::model::MultiLineString;
 // use crate::signal::*;
-use crate::mysignal::*;
 use crate::update::*;
 
 // #[derive(Debug, Default)]
@@ -784,6 +776,7 @@ fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
 }
 
 use crate::mysignal::SignalSpawner;
+use crate::signal::run;
 
 // main ---
 async fn real_main() -> color_eyre::Result<()> {
@@ -795,11 +788,33 @@ async fn real_main() -> color_eyre::Result<()> {
   let mut terminal = ratatui::init();
   let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
+  // this should be initialized after we link shhhhhh
+  let mut model = Model::init();
+  let settings = &Settings::init();
+
+  let mode = Arc::clone(&model.mode);
+
+  let action_tx1 = action_tx.clone();
+  let updater = tokio::spawn(async move {
+    handle_crossterm_events(action_tx1, &mode).await;
+  });
+
   let spawner = SignalSpawner::new(action_tx.clone());
 
   // let db_path = default_db_path();
   let db_path = "/home/mqngo/Coding/rust/signal-tui/plzwork.db3";
   let config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust).await?;
+
+  // tokio::spawn(run(
+  //   Cmd::LinkDevice {
+  //     servers: SignalServers::Production,
+  //     device_name: "terminal enjoyer".to_string(),
+  //   },
+  //   config_store.clone(),
+  //   action_tx.clone(),
+  // ));
+
+  // Logger::log("oh so this works".to_string());
 
   if !config_store.is_registered().await {
     let mut linking_model = LinkState { url: None };
@@ -808,8 +823,37 @@ async fn real_main() -> color_eyre::Result<()> {
       servers: SignalServers::Production,
       device_name: "terminal enjoyer".to_string(),
     });
-    Logger::log(format!("we spawned the url maker thingy idk i wanna sleep"));
-
+    //
+    // let (send, mut recv) = mpsc::unbounded_channel::<Cmd>();
+    //
+    // std::thread::spawn(move || {
+    //   let local = LocalSet::new();
+    //   local
+    //     .spawn_local(async move {
+    //       Logger::log(format!("getting REAL thready out here"));
+    //       let db_path = "/home/mqngo/Coding/rust/signal-tui/plzwork.db3";
+    //
+    //       // UNWRAPPING ERROR NOT PRODUCTION READY!!!
+    //       let config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust)
+    //         .await
+    //         .unwrap();
+    //
+    //       while let Some(new_task) = recv.recv().await {
+    //         Logger::log(format!("we gyatt a message but before"));
+    //         let cloned_output = output.clone();
+    //         let cloned_store = config_store.clone();
+    //         tokio::task::spawn_local(run(new_task, cloned_store, cloned_output));
+    //       }
+    //       // If the while loop returns, then all the LocalSpawner
+    //       // objects have been dropped.
+    //     })
+    //     .await;
+    // });
+    // Logger::log(format!("we spawned the url maker thingy idk i wanna sleep"));
+    // send.send(Cmd::LinkDevice {
+    //   servers: SignalServers::Production,
+    //   device_name: "terminal enjoyer".to_string(),
+    // })?;
     // let (linking_action_tx, linking_action_rx) = mpsc::channel();
 
     loop {
@@ -853,15 +897,6 @@ async fn real_main() -> color_eyre::Result<()> {
     }
   }
 
-  let mut model = Model::init();
-  let settings = &Settings::init();
-
-  let mode = Arc::clone(&model.mode);
-
-  let updater = tokio::spawn(async move {
-    handle_crossterm_events(action_tx, &mode).await;
-  });
-
   while model.running_state != RunningState::OhShit {
     // Render the current view
     terminal.draw(|f| view(&mut model, f, settings))?;
@@ -881,7 +916,7 @@ async fn real_main() -> color_eyre::Result<()> {
 }
 
 // main ---
-#[tokio::main]
+#[tokio::main(flavor = "local")]
 async fn main() {
   let result = real_main().await;
 
@@ -949,9 +984,7 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
 
   match model.focus {
     Focus::Chats => {
-      model
-        .current_chat()
-        .render(layout[1], frame.buffer_mut(), settings, contacts);
+      model.current_chat().render(layout[1], frame.buffer_mut(), settings, contacts);
 
       frame.set_cursor_position(model.current_chat().text_input.cursor_position);
     }
