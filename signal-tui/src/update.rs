@@ -4,6 +4,8 @@ use crossterm::event::{self, Event, EventStream, KeyCode};
 
 use futures::{StreamExt, future::FutureExt};
 
+use presage::model::messages::Received;
+
 use crate::logger::Logger;
 use crate::*;
 
@@ -14,7 +16,6 @@ pub enum LinkingAction {
   Fail,
 }
 
-#[derive(PartialEq)]
 pub enum Action {
   Type(char),
   Backspace,
@@ -24,6 +25,7 @@ pub enum Action {
   SetFocus(Focus),
 
   Link(LinkingAction),
+  Receive(Received),
 
   Quit,
 }
@@ -43,7 +45,7 @@ pub async fn handle_crossterm_events(tx: UnboundedSender<Action>, mode: &Arc<Mut
         Event::Key(key) => {
           if key.kind == event::KeyEventKind::Press {
             if let Some(action) = handle_key(key, mode) {
-              let err = tx.send(action);
+              let _err = tx.send(action);
             }
           }
         }
