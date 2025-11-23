@@ -101,6 +101,8 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
       model.running_state = RunningState::OhShit;
     }
 
+    Action::Receive(recieved) => {}
+
     _ => {}
   };
 
