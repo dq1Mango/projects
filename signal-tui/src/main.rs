@@ -16,6 +16,7 @@ use std::{
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
+use presage::libsignal_service::{Profile, configuration::SignalServers, profile_name::ProfileName};
 use presage::model::messages::Received;
 use presage::store::{StateStore, Store};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
@@ -35,12 +36,8 @@ use tokio::{
 use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
-use crate::logger::Logger;
-use crate::model::MultiLineString;
-use crate::signal::Cmd;
-use crate::signal::default_db_path;
-use crate::update::LinkingAction;
-use presage::libsignal_service::configuration::SignalServers;
+use crate::{logger::Logger, model::MultiLineString, signal::Cmd, signal::default_db_path, update::LinkingAction};
+
 use qrcodegen::QrCode;
 use qrcodegen::QrCodeEcc;
 // use crate::signal::*;
@@ -151,15 +148,15 @@ struct Group {
   _description: String,
 }
 
-#[derive(Debug, Default)]
-pub struct Contact {
-  _name: String,
-  nick_name: String,
-  // pfp: Option<MyImageWrapper>,
-  // icon: Image,
-}
+// #[derive(Debug, Default)]
+// pub struct Contact {
+//   _name: String,
+//   nick_name: String,
+//   // pfp: Option<MyImageWrapper>,
+//   // icon: Image,
+// }
 
-type Contacts = Arc<HashMap<PhoneNumber, Contact>>;
+type Contacts = Arc<HashMap<PhoneNumber, Profile>>;
 
 #[derive(Debug, Default)]
 pub struct Chat {
@@ -370,7 +367,13 @@ impl Message {
     let mut block = Block::bordered().border_set(border::THICK);
 
     if let Metadata::NotMyMessage(x) = &self.metadata {
-      block = block.title_top(Line::from(contacts[&x.sender].nick_name.clone()).left_aligned());
+      let name = contacts[&x.sender].name;
+      let name = if Some(name) = name.family_name {
+        name
+      } else {
+        name.given_name()
+      };
+      block = block.title_top(Line::from(name.clone()).left_aligned());
     }
     // this ugly shadow cost me a good 15 mins of my life ... but im not changing it
     let mut my_area = area.clone();
