@@ -16,7 +16,12 @@ use std::{
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
-use presage::libsignal_service::{Profile, configuration::SignalServers, profile_name::ProfileName};
+use presage::libsignal_service::{
+  Profile,
+  configuration::SignalServers,
+  prelude::{Content, ProfileKey, Uuid, UuidError},
+  profile_name::ProfileName,
+};
 use presage::model::messages::Received;
 use presage::store::{StateStore, Store};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
@@ -27,7 +32,7 @@ use ratatui::{
   style::{Color, Modifier, Style, Stylize},
   symbols::border,
   text::{Line, Span},
-  widgets::{Block, Paragraph, Widget},
+  widgets::{Block, Gauge, Paragraph, Widget},
 };
 use tokio::{
   sync::mpsc,
@@ -36,7 +41,10 @@ use tokio::{
 use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
-use crate::{logger::Logger, model::MultiLineString, signal::Cmd, signal::default_db_path, update::LinkingAction};
+use crate::{
+  logger::Logger, model::MultiLineString, mysignal::SignalSpawner, signal::Cmd, signal::default_db_path,
+  update::LinkingAction,
+};
 
 use qrcodegen::QrCode;
 use qrcodegen::QrCodeEcc;
@@ -59,7 +67,10 @@ pub struct LinkState {
   url: Option<Url>,
 }
 
-struct LoadState {}
+struct LoadState {
+  raw_duration: Option<u64>,
+  latest_timestamp: Option<u64>,
+}
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub enum RunningState {
@@ -264,10 +275,16 @@ impl Model {
 
     contacts.insert(
       dummy_number,
-      Contact {
-        nick_name: String::from("nickname"),
-        _name: String::from("name"),
-        // pfp: Some(MyImageWrapper(image2)),
+      Profile {
+        name: Some(ProfileName {
+          family_name: Some(String::from("nickname")),
+          given_name: String::from("name"),
+          // pfp: Some(MyImageWrapper(image2)),
+        }),
+        about: None,
+        about_emoji: None,
+        avatar: None,
+        unrestricted_unidentified_access: true,
       },
     );
 
@@ -367,13 +384,22 @@ impl Message {
     let mut block = Block::bordered().border_set(border::THICK);
 
     if let Metadata::NotMyMessage(x) = &self.metadata {
-      let name = contacts[&x.sender].name;
-      let name = if Some(name) = name.family_name {
-        name
-      } else {
-        name.given_name()
+      let name = match &contacts[&x.sender].name {
+        Some(name) => {
+          // let name = if Some(profile_name) = name.family_name {
+          //   profile_name
+          // } else {
+          //   name.given_name
+          // };
+          // name
+          match &name.family_name {
+            Some(family_name) => family_name.clone(),
+            None => name.given_name.clone(),
+          }
+        }
+        None => "smthns borken".to_string(),
       };
-      block = block.title_top(Line::from(name.clone()).left_aligned());
+      block = block.title_top(Line::from(name).left_aligned());
     }
     // this ugly shadow cost me a good 15 mins of my life ... but im not changing it
     let mut my_area = area.clone();
@@ -428,6 +454,35 @@ impl Message {
         }
       }
     };
+  }
+
+  fn format_duration(&self) -> String {
+    let time: DateTime<Utc>;
+
+    match &self.metadata {
+      Metadata::NotMyMessage(x) => time = x.sent,
+      Metadata::MyMessage(x) => time = x.sent,
+    }
+
+    let duration = Utc::now().signed_duration_since(time);
+
+    if duration.num_minutes() < 1 {
+      return "Now".to_string();
+    } else if duration.num_hours() < 1 {
+      let mut temp = duration.num_minutes().to_string();
+      temp.push_str("m");
+      return temp;
+    } else if duration.num_days() < 1 {
+      let mut temp = duration.num_hours().to_string();
+      temp.push_str("h");
+      return temp;
+    } else {
+      return time.format("%M %D").to_string();
+    }
+
+    // let mut result = num.to_string();
+    // result.push_str(chr);
+    // result
   }
 
   fn height(&mut self, width: u16) -> u16 {
@@ -586,33 +641,22 @@ impl MyStringUtils for String {
   }
 }
 
-fn format_duration(message: &Message) -> String {
-  let time: DateTime<Utc>;
-
-  match &message.metadata {
-    Metadata::NotMyMessage(x) => time = x.sent,
-    Metadata::MyMessage(x) => time = x.sent,
-  }
-
+fn format_duration_fancy(time: &DateTime<Utc>) -> String {
   let duration = Utc::now().signed_duration_since(time);
 
   if duration.num_minutes() < 1 {
     return "Now".to_string();
   } else if duration.num_hours() < 1 {
     let mut temp = duration.num_minutes().to_string();
-    temp.push_str("m");
+    temp.push_str(" minutes ago");
     return temp;
   } else if duration.num_days() < 1 {
     let mut temp = duration.num_hours().to_string();
-    temp.push_str("h");
+    temp.push_str(" hours ago");
     return temp;
   } else {
     return time.format("%M %D").to_string();
   }
-
-  // let mut result = num.to_string();
-  // result.push_str(chr);
-  // result
 }
 
 impl MyMessage {
@@ -682,7 +726,7 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
 
   Paragraph::new(innner_lines).render(layout[1], buf);
 
-  let time = format_duration(last_message);
+  let time = last_message.format_duration();
 
   Paragraph::new(vec![Line::from(time), last_message.format_delivered_status()]).render(layout[2], buf);
 }
@@ -785,15 +829,38 @@ fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
 
 fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
   let area = frame.area();
-  let buffer = frame.buffer_mut();
+  let buf = frame.buffer_mut();
 
-  let area = pad_with_border(area, buffer);
+  let mut area = pad_with_border(area, buf);
 
-  Line::from("Loading past messages ...").render(area, buffer);
+  Line::from("Loading past messages ...").render(area, buf);
+
+  area.y += 1;
+
+  // let fist_loaded = Utc::now().signed_duration_since(state.first_timestamp);
+  // let last_laoded = Utc::now().signed_duration_since(state.latest_timestamp);
+
+  // this shouldnt happen basically ever but its a weird edge case
+  // if state.raw_duration == None || state.latest_timestamp == None {
+  //   return;
+  // }
+
+  if let Some(raw_duration) = state.raw_duration {
+    if let Some(latest_timestamp) = state.latest_timestamp {
+      let formatted_duration = format_duration_fancy(&DateTime::from_timestamp_millis(latest_timestamp as i64).unwrap());
+
+      let partial_duration = Utc::now().timestamp_millis() as u64 - latest_timestamp;
+
+      let percent = 1.0 as f32 - (partial_duration as f32 / raw_duration as f32);
+
+      Gauge::default()
+        .block(Block::bordered().title(["Loading messages from ", &formatted_duration].concat()))
+        .gauge_style(Style::new().white().on_black().italic())
+        .percent((percent * 100 as f32) as u16)
+        .render(area, buf);
+    }
+  }
 }
-
-use crate::mysignal::SignalSpawner;
-use crate::signal::run;
 
 // main ---
 async fn real_main() -> color_eyre::Result<()> {
@@ -875,7 +942,10 @@ async fn real_main() -> color_eyre::Result<()> {
 
   spawner.spawn(Cmd::Receive { notifications: false });
 
-  let loading_model = LoadState {};
+  let mut loading_model = LoadState {
+    raw_duration: None,
+    latest_timestamp: None,
+  };
   loop {
     terminal.draw(|f| draw_loading_sreen(&loading_model, f))?;
 
@@ -885,7 +955,17 @@ async fn real_main() -> color_eyre::Result<()> {
       Some(Action::Receive(receive)) => match receive {
         Received::QueueEmpty => break,
         Received::Contacts => Logger::log("we gyatt some contacts".to_string()),
-        Received::Content(content) => Logger::log("we gyatt some messages yippee".to_string()),
+        Received::Content(content) => {
+          Logger::log(format!("{}", content.metadata.timestamp));
+          Logger::log(format!("{}", Utc::now().timestamp()));
+          match loading_model.raw_duration {
+            None => loading_model.raw_duration = Some(Utc::now().timestamp_millis() as u64 - content.metadata.timestamp),
+            _ => {}
+          }
+
+          loading_model.latest_timestamp = Some(content.metadata.timestamp)
+          // Logger::log("we gyatt some messages yippee".to_string()),
+        }
       },
 
       Some(Action::Quit) => {
@@ -987,7 +1067,9 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
 
   match model.focus {
     Focus::Chats => {
-      model.current_chat().render(layout[1], frame.buffer_mut(), settings, contacts);
+      model
+        .current_chat()
+        .render(layout[1], frame.buffer_mut(), settings, contacts);
 
       frame.set_cursor_position(model.current_chat().text_input.cursor_position);
     }
