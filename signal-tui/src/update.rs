@@ -4,7 +4,9 @@ use crossterm::event::{self, Event, EventStream, KeyCode};
 
 use futures::{StreamExt, future::FutureExt};
 
-use presage::model::messages::Received;
+// use presage::model::messages::Received;
+use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+use presage::proto::DataMessage;
 
 use crate::logger::Logger;
 use crate::*;
@@ -25,6 +27,7 @@ pub enum Action {
   SetFocus(Focus),
 
   Link(LinkingAction),
+  // Message(Content),
   Receive(Received),
 
   Quit,
@@ -101,22 +104,169 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
       model.running_state = RunningState::OhShit;
     }
 
-    Action::Receive(recieved) => {}
+    Action::Receive(received) => match received {
+      Received::Content(content) => match content.body {
+        ContentBody::DataMessage(data) => {}
+        _ => {}
+      },
+      _ => {}
+    },
 
     _ => {}
-  };
+  }
 
   None
 }
 
-// pub fn scroll(chat: &mut Chat, lines: i16, settings: Settings) {
-//   let mut lines = lines;
+// async fn print_message<S: Store>(manager: &Manager<S, Registered>, notifications: bool, content: &Content) {
+//   let Ok(thread) = Thread::try_from(content) else {
+//     warn!("failed to derive thread from content");
+//     return;
+//   };
 //
-//   // oh man i sure hope this ugly line of repeated code will not f*** me over in the future
-//     let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
+//   async fn format_data_message<S: Store>(
+//     thread: &Thread,
+//     data_message: &DataMessage,
+//     manager: &Manager<S, Registered>,
+//   ) -> Option<String> {
+//     match data_message {
+//       DataMessage {
+//         quote: Some(Quote {
+//           text: Some(quoted_text), ..
+//         }),
+//         body: Some(body),
+//         ..
+//       } => Some(format!("Answer to message \"{quoted_text}\": {body}")),
+//       DataMessage {
+//         reaction: Some(Reaction {
+//           target_sent_timestamp: Some(ts),
+//           emoji: Some(emoji),
+//           ..
+//         }),
+//         ..
+//       } => {
+//         let Ok(Some(message)) = manager.store().message(thread, *ts).await else {
+//           warn!(%thread, sent_at = ts, "no message found in thread");
+//           return None;
+//         };
 //
-//   loop {
-//     let height = chat.messages[chat.location.index].body.as_lines(message_width).len();
-//     if lines
+//         let ContentBody::DataMessage(DataMessage { body: Some(body), .. }) = message.body else {
+//           warn!("message reacted to has no body");
+//           return None;
+//         };
+//
+//         Some(format!("Reacted with {emoji} to message: \"{body}\""))
+//       }
+//       DataMessage { body: Some(body), .. } => Some(body.to_string()),
+//       _ => Some("Empty data message".to_string()),
+//     }
+//   }
+//
+//   async fn format_contact<S: Store>(uuid: &Uuid, manager: &Manager<S, Registered>) -> String {
+//     manager
+//       .store()
+//       .contact_by_id(uuid)
+//       .await
+//       .ok()
+//       .flatten()
+//       .filter(|c| !c.name.is_empty())
+//       .map(|c| format!("{}: {}", c.name, uuid))
+//       .unwrap_or_else(|| uuid.to_string())
+//   }
+//
+//   async fn format_group<S: Store>(key: [u8; 32], manager: &Manager<S, Registered>) -> String {
+//     manager
+//       .store()
+//       .group(key)
+//       .await
+//       .ok()
+//       .flatten()
+//       .map(|g| g.title)
+//       .unwrap_or_else(|| "<missing group>".to_string())
+//   }
+//
+//   enum Msg<'a> {
+//     Received(&'a Thread, String),
+//     Sent(&'a Thread, String),
+//   }
+//
+//   if let Some(msg) = match &content.body {
+//     ContentBody::NullMessage(_) => Some(Msg::Received(&thread, "Null message (for example deleted)".to_string())),
+//     ContentBody::DataMessage(data_message) => format_data_message(&thread, data_message, manager)
+//       .await
+//       .map(|body| Msg::Received(&thread, body)),
+//     ContentBody::EditMessage(EditMessage {
+//       data_message: Some(data_message),
+//       ..
+//     }) => format_data_message(&thread, data_message, manager)
+//       .await
+//       .map(|body| Msg::Received(&thread, body)),
+//     ContentBody::EditMessage(EditMessage { .. }) => None,
+//     ContentBody::SynchronizeMessage(SyncMessage {
+//       sent: Some(Sent {
+//         message: Some(data_message),
+//         ..
+//       }),
+//       ..
+//     }) => format_data_message(&thread, data_message, manager)
+//       .await
+//       .map(|body| Msg::Sent(&thread, body)),
+//     ContentBody::SynchronizeMessage(SyncMessage {
+//       sent:
+//         Some(Sent {
+//           edit_message: Some(EditMessage {
+//             data_message: Some(data_message),
+//             ..
+//           }),
+//           ..
+//         }),
+//       ..
+//     }) => format_data_message(&thread, data_message, manager)
+//       .await
+//       .map(|body| Msg::Sent(&thread, body)),
+//     ContentBody::SynchronizeMessage(SyncMessage { .. }) => None,
+//     ContentBody::CallMessage(_) => Some(Msg::Received(&thread, "is calling!".into())),
+//     ContentBody::TypingMessage(_) => Some(Msg::Received(&thread, "is typing...".into())),
+//     ContentBody::ReceiptMessage(ReceiptMessage {
+//       r#type: receipt_type,
+//       timestamp,
+//     }) => Some(Msg::Received(
+//       &thread,
+//       format!(
+//         "got {:?} receipt for messages sent at {timestamp:?}",
+//         receipt_message::Type::try_from(receipt_type.unwrap_or_default()).unwrap()
+//       ),
+//     )),
+//     ContentBody::StoryMessage(story) => Some(Msg::Received(&thread, format!("new story: {story:?}"))),
+//     ContentBody::PniSignatureMessage(_) => Some(Msg::Received(&thread, "got PNI signature message".into())),
+//   } {
+//     let ts = content.timestamp();
+//     let (prefix, body) = match msg {
+//       Msg::Received(Thread::Contact(sender), body) => {
+//         let contact = format_contact(sender, manager).await;
+//         (format!("From {contact} @ {ts}: "), body)
+//       }
+//       Msg::Sent(Thread::Contact(recipient), body) => {
+//         let contact = format_contact(recipient, manager).await;
+//         (format!("To {contact} @ {ts}"), body)
+//       }
+//       Msg::Received(Thread::Group(key), body) => {
+//         let sender = format_contact(&content.metadata.sender.raw_uuid(), manager).await;
+//         let group = format_group(*key, manager).await;
+//         (format!("From {sender} to group {group} @ {ts}: "), body)
+//       }
+//       Msg::Sent(Thread::Group(key), body) => {
+//         let group = format_group(*key, manager).await;
+//         (format!("To group {group} @ {ts}"), body)
+//       }
+//     };
+//
+//     println!("{prefix} / {body}");
+//
+//     if notifications {
+//       if let Err(error) = Notification::new().summary(&prefix).body(&body).icon("presage").show() {
+//         error!(%error, "failed to display desktop notification");
+//       }
+//     }
 //   }
 // }
