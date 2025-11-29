@@ -11,7 +11,7 @@ pub struct MultiLineString {
 }
 
 impl MultiLineString {
-  pub fn init(str: &str) -> Self {
+  pub fn new(str: &str) -> Self {
     Self {
       body: str.to_string(),
       cached_lines: vec!["".to_string()],
