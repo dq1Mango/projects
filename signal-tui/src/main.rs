@@ -19,12 +19,14 @@ use chrono::{DateTime, TimeDelta, Utc};
 use presage::libsignal_service::{
   Profile,
   configuration::SignalServers,
+  content::{ContentBody, DataMessage, GroupContextV2},
   prelude::{Content, ProfileKey, Uuid, UuidError},
   profile_name::ProfileName,
 };
 use presage::model::messages::Received;
-use presage::store::{StateStore, Store};
+use presage::store::{StateStore, Store, Thread};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
+
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -34,17 +36,12 @@ use ratatui::{
   text::{Line, Span},
   widgets::{Block, Gauge, Paragraph, Widget},
 };
-use tokio::{
-  sync::mpsc,
-  task::{self, spawn_local},
-};
+
+use tokio::sync::mpsc;
 use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
-use crate::{
-  logger::Logger, model::MultiLineString, mysignal::SignalSpawner, signal::Cmd, signal::default_db_path,
-  update::LinkingAction,
-};
+use crate::{logger::Logger, model::MultiLineString, mysignal::SignalSpawner, signal::Cmd, update::LinkingAction};
 
 use qrcodegen::QrCode;
 use qrcodegen::QrCodeEcc;
@@ -865,8 +862,6 @@ fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
 
       let percent = 1.0 as f64 - (partial_duration as f64 / raw_duration as f64);
 
-      Logger::log(format!("this is the L + ratio: {}", percent));
-
       let area = center_div(area, Constraint::Percentage(40), Constraint::Percentage(20));
 
       let mut area = pad_with_border(area, buf);
@@ -925,8 +920,6 @@ async fn real_main() -> color_eyre::Result<()> {
   //   action_tx.clone(),
   // ));
 
-  // Logger::log("oh so this works".to_string());
-
   if !config_store.is_registered().await {
     let mut linking_model = LinkState { url: None };
 
@@ -938,12 +931,10 @@ async fn real_main() -> color_eyre::Result<()> {
 
     loop {
       terminal.draw(|f| draw_linking_screen(&linking_model, f))?;
-      Logger::log(format!("we drew da screen"));
 
       // Handle events and map to a Message
       let current_msg = action_rx.recv().await;
 
-      Logger::log(format!("we gyatt a message"));
       match current_msg {
         Some(Action::Link(linking)) => match linking {
           LinkingAction::Url(url) => linking_model.url = Some(url),
@@ -983,15 +974,12 @@ async fn real_main() -> color_eyre::Result<()> {
         Received::QueueEmpty => break,
         Received::Contacts => Logger::log("we gyatt some contacts".to_string()),
         Received::Content(content) => {
-          Logger::log(format!("{}", content.metadata.timestamp));
-          Logger::log(format!("{}", Utc::now().timestamp_millis()));
           match loading_model.raw_duration {
             None => loading_model.raw_duration = Some(Utc::now().timestamp_millis() as u64 - content.metadata.timestamp),
             _ => {}
           }
 
           loading_model.latest_timestamp = Some(content.metadata.timestamp)
-          // Logger::log("we gyatt some messages yippee".to_string()),
         }
       },
 
