@@ -2,6 +2,7 @@ mod logger;
 mod model;
 mod mysignal;
 mod signal;
+
 #[cfg(test)]
 mod tests;
 
@@ -15,7 +16,6 @@ use std::{
   vec,
 };
 
-use chrono::{DateTime, TimeDelta, Utc};
 use presage::libsignal_service::{
   Profile,
   configuration::SignalServers,
@@ -23,6 +23,7 @@ use presage::libsignal_service::{
   prelude::{Content, ProfileKey, Uuid, UuidError},
   profile_name::ProfileName,
 };
+
 use presage::model::messages::Received;
 use presage::store::{StateStore, Store, Thread};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
@@ -37,16 +38,16 @@ use ratatui::{
   widgets::{Block, Gauge, Paragraph, Widget},
 };
 
+use chrono::{DateTime, TimeDelta, Utc};
 use tokio::sync::mpsc;
 use url::Url;
 // use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
-
-use crate::{logger::Logger, model::MultiLineString, mysignal::SignalSpawner, signal::Cmd, update::LinkingAction};
 
 use qrcodegen::QrCode;
 use qrcodegen::QrCodeEcc;
 // use crate::signal::*;
 use crate::update::*;
+use crate::{logger::Logger, model::MultiLineString, mysignal::SignalSpawner, signal::Cmd, update::LinkingAction};
 
 // #[derive(Debug, Default)]
 pub struct Model {
@@ -99,7 +100,7 @@ pub enum Focus {
 
 #[derive(Debug)]
 pub struct NotMyMessage {
-  sender: PhoneNumber,
+  sender: Uuid,
   sent: DateTime<Utc>,
 }
 
@@ -107,8 +108,8 @@ pub struct NotMyMessage {
 pub struct MyMessage {
   sent: DateTime<Utc>,
   // these r kind of a mess
-  delivered_to: Vec<(PhoneNumber, Option<DateTime<Utc>>)>,
-  read_by: Vec<(PhoneNumber, Option<DateTime<Utc>>)>,
+  delivered_to: Vec<(Uuid, Option<DateTime<Utc>>)>,
+  read_by: Vec<(Uuid, Option<DateTime<Utc>>)>,
 }
 
 #[derive(Debug)]
@@ -152,7 +153,7 @@ impl Clone for PhoneNumber {
 struct Group {
   name: String,
   // icon: Option<MyImageWrapper>,
-  members: Vec<PhoneNumber>,
+  members: Vec<Uuid>,
   _description: String,
 }
 
@@ -164,7 +165,7 @@ struct Group {
 //   // icon: Image,
 // }
 
-type Contacts = Arc<HashMap<PhoneNumber, Profile>>;
+type Contacts = Arc<HashMap<Uuid, Profile>>;
 
 #[derive(Debug, Default)]
 pub struct Chat {
@@ -204,34 +205,37 @@ impl Settings {
   }
 }
 
+use uuid::uuid;
+
 impl Model {
   fn init() -> Self {
-    let dummy_number = PhoneNumber("14124206767".to_string());
+    let _dummy_number = PhoneNumber("14124206767".to_string());
+    let dummy_id = uuid!("00000000-0000-0000-0000-000000000000");
 
     let messages = vec![
       Message {
-        body: MultiLineString::init(
+        body: MultiLineString::new(
           "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
         ),
         metadata: Metadata::NotMyMessage(NotMyMessage {
-          sender: dummy_number.clone(),
+          sender: dummy_id.clone(),
           sent: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
         }),
       },
       Message {
-        body: MultiLineString::init("second message"),
+        body: MultiLineString::new("second message"),
         metadata: Metadata::MyMessage(MyMessage {
           sent: Utc::now(),
-          read_by: vec![(dummy_number.clone(), Some(Utc::now()))],
-          delivered_to: vec![(dummy_number.clone(), None)],
+          read_by: vec![(dummy_id.clone(), Some(Utc::now()))],
+          delivered_to: vec![(dummy_id.clone(), None)],
         }),
       },
       Message {
-        body: MultiLineString::init("a luxurious third message because im not convinced yet"),
+        body: MultiLineString::new("a luxurious third message because im not convinced yet"),
         metadata: Metadata::MyMessage(MyMessage {
           sent: Utc::now(),
-          read_by: vec![(dummy_number.clone(), None)],
-          delivered_to: vec![(dummy_number.clone(), None)],
+          read_by: vec![(dummy_id.clone(), None)],
+          delivered_to: vec![(dummy_id.clone(), None)],
         }),
       },
     ];
@@ -255,7 +259,7 @@ impl Model {
     // let image2 = picker.new_resize_protocol(dyn_img);
 
     chat.participants = Group {
-      members: vec![dummy_number.clone()],
+      members: vec![dummy_id.clone()],
       name: "group 1".to_string(),
       // icon: Some(MyImageWrapper(image)),
       _description: "".to_string(),
@@ -271,7 +275,7 @@ impl Model {
     let mut contacts = HashMap::new();
 
     contacts.insert(
-      dummy_number,
+      dummy_id,
       Profile {
         name: Some(ProfileName {
           family_name: Some(String::from("nickname")),
@@ -316,13 +320,6 @@ impl Model {
 impl TextInput {
   fn render(&mut self, area: Rect, buf: &mut Buffer) {
     let block = Block::bordered().border_set(border::THICK);
-
-    // shitty temp padding for the border
-    // let mut area = area;
-    // area.x += 1;
-    // area.width -= 2;
-    // area.height -= 2;
-    // area.y += 1;
 
     // minus 3 b/c you cant have the cursor on the border and i cant be bothered to add another
     // edge case
@@ -373,6 +370,23 @@ impl TextInput {
 
     self.cursor_index -= 1;
     self.body.body.remove(self.cursor_index as usize);
+  }
+}
+
+impl Metadata {
+  fn new_mine(timestamp: DateTime<Utc>) -> Self {
+    Self::MyMessage(MyMessage {
+      sent: timestamp,
+      delivered_to: Vec::<(Uuid, Option<DateTime<Utc>>)>::new(),
+      read_by: Vec::<(Uuid, Option<DateTime<Utc>>)>::new(),
+    })
+  }
+
+  fn new_not_mine(timestamp: DateTime<Utc>, sender: Uuid) -> Self {
+    Self::NotMyMessage(NotMyMessage {
+      sent: timestamp,
+      sender: sender,
+    })
   }
 }
 
@@ -609,6 +623,43 @@ impl Chat {
   fn last_message(&self) -> &Message {
     let last = self.messages.len() - 1;
     &self.messages[last]
+  }
+
+  fn update(&mut self, message: DataMessage, sender: Uuid, timestamp: u64) {
+    // let new_timestamp = message.timestamp();
+
+    let mut i = self.messages.len() - 1;
+    while i > 0 {
+      let ts = match &self.messages[i].metadata {
+        Metadata::MyMessage(data) => data.sent.timestamp_millis() as u64,
+        Metadata::NotMyMessage(data) => data.sent.timestamp_millis() as u64,
+      };
+
+      if timestamp < ts {
+        i += 1;
+        break;
+      }
+
+      i -= 1;
+    }
+
+    fn get_message_body(message: &DataMessage) -> String {
+      match message {
+        DataMessage { body: Some(body), .. } => body.to_string().clone(),
+        _ => "Empty data message".to_string().clone(),
+      }
+    }
+
+    let parsed_message = Message {
+      body: MultiLineString::new(&get_message_body(&message)),
+      metadata: Metadata::new_not_mine(
+        DateTime::from_timestamp_millis(timestamp as i64).expect("kaboom"),
+        sender,
+      ),
+    };
+
+    // goto considered harmful lmao
+    self.messages.insert(i, parsed_message);
   }
 }
 

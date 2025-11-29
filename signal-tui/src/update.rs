@@ -7,6 +7,7 @@ use futures::{StreamExt, future::FutureExt};
 // use presage::model::messages::Received;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::proto::DataMessage;
+use presage::store::Thread;
 
 use crate::logger::Logger;
 use crate::*;
@@ -109,13 +110,38 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
         ContentBody::DataMessage(data) => {}
         _ => {}
       },
-      _ => {}
+      Received::Contacts => {
+        // update our in memory cache of contacts
+      }
+      Received::QueueEmpty => {}
     },
 
     _ => {}
   }
 
   None
+}
+
+pub fn insert_message(model: &mut Model, message: DataMessage, timestamp: u64) -> () {
+  let Ok(thread) = Thread::try_from(content) else {
+    Logger::log("failed to derive thread from content".to_string());
+    // warn!("failed to derive thread from content");
+    return;
+  };
+
+  match thread {
+    Thread::Contact(uuid) => {
+      for chat in model.chats {
+        if chat.participants.members == [uuid] {
+          chat.update(message, uuid, timestamp);
+          return;
+        }
+      }
+
+      Logger::log(format!("Could not find a chat that matched the id: {}", uuid));
+    }
+    _ => {}
+  }
 }
 
 // async fn print_message<S: Store>(manager: &Manager<S, Registered>, notifications: bool, content: &Content) {
