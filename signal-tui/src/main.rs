@@ -28,7 +28,7 @@ use presage_store_sqlite::{OnNewIdentity, SqliteStore};
 use ratatui::{
   Frame,
   buffer::Buffer,
-  layout::{Constraint, Direction, Layout, Position, Rect},
+  layout::{Constraint, Direction, Flex, Layout, Position, Rect},
   style::{Color, Modifier, Style, Stylize},
   symbols::border,
   text::{Line, Span},
@@ -827,13 +827,24 @@ fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
   }
 }
 
+fn center_div(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
+  let [area] = Layout::horizontal([horizontal]).flex(Flex::Center).areas(area);
+  let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
+  area
+}
+
+fn center_vertical(area: Rect, height: u16) -> Rect {
+  let [area] = Layout::vertical([Constraint::Length(height)])
+    .flex(Flex::Center)
+    .areas(area);
+  area
+}
+
 fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
   let area = frame.area();
   let buf = frame.buffer_mut();
 
   let mut area = pad_with_border(area, buf);
-
-  Line::from("Loading past messages ...").render(area, buf);
 
   area.y += 1;
 
@@ -845,20 +856,36 @@ fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
   //   return;
   // }
 
+  // these should only happen like immediately on start up
   if let Some(raw_duration) = state.raw_duration {
     if let Some(latest_timestamp) = state.latest_timestamp {
       let formatted_duration = format_duration_fancy(&DateTime::from_timestamp_millis(latest_timestamp as i64).unwrap());
 
       let partial_duration = Utc::now().timestamp_millis() as u64 - latest_timestamp;
 
-      let percent = 1.0 as f32 - (partial_duration as f32 / raw_duration as f32);
+      let percent = 1.0 as f64 - (partial_duration as f64 / raw_duration as f64);
+
+      Logger::log(format!("this is the L + ratio: {}", percent));
+
+      let area = center_div(area, Constraint::Percentage(40), Constraint::Percentage(20));
+
+      let mut area = pad_with_border(area, buf);
+
+      Line::from(["Loading messages from ", &formatted_duration].concat())
+        .centered()
+        .render(area, buf);
+
+      area.y += 1;
+
+      let area = center_vertical(area, 2);
 
       Gauge::default()
-        .block(Block::bordered().title(["Loading messages from ", &formatted_duration].concat()))
         .gauge_style(Style::new().white().on_black().italic())
-        .percent((percent * 100 as f32) as u16)
+        .ratio(percent.clamp(0.0, 1.0))
         .render(area, buf);
     }
+  } else {
+    Line::from("Loading past messages ...").render(area, buf);
   }
 }
 
@@ -957,7 +984,7 @@ async fn real_main() -> color_eyre::Result<()> {
         Received::Contacts => Logger::log("we gyatt some contacts".to_string()),
         Received::Content(content) => {
           Logger::log(format!("{}", content.metadata.timestamp));
-          Logger::log(format!("{}", Utc::now().timestamp()));
+          Logger::log(format!("{}", Utc::now().timestamp_millis()));
           match loading_model.raw_duration {
             None => loading_model.raw_duration = Some(Utc::now().timestamp_millis() as u64 - content.metadata.timestamp),
             _ => {}
