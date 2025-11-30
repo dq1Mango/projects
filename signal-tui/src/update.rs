@@ -7,6 +7,7 @@ use futures::{StreamExt, future::FutureExt};
 // use presage::model::messages::Received;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::proto::DataMessage;
+use presage::store::ContentExt;
 use presage::store::Thread;
 
 use crate::logger::Logger;
@@ -106,10 +107,18 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
     }
 
     Action::Receive(received) => match received {
-      Received::Content(content) => match content.body {
-        ContentBody::DataMessage(data) => {}
-        _ => {}
-      },
+      Received::Content(content) => {
+        let ts = content.timestamp();
+        let Ok(thread) = Thread::try_from(&*content) else {
+          Logger::log("failed to derive thread from content".to_string());
+          return None;
+        };
+
+        match content.body {
+          ContentBody::DataMessage(data) => insert_message(model, data, thread, ts),
+          _ => {}
+        }
+      }
       Received::Contacts => {
         // update our in memory cache of contacts
       }
@@ -122,16 +131,20 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
   None
 }
 
-pub fn insert_message(model: &mut Model, message: DataMessage, timestamp: u64) -> () {
-  let Ok(thread) = Thread::try_from(content) else {
-    Logger::log("failed to derive thread from content".to_string());
-    // warn!("failed to derive thread from content");
-    return;
-  };
+// use
+//
+// fn slices_equal<T>(slice1: Vec<T>, slice2: Vec<T>) -> bool {
+//   if slice1.len() != slice1.len() {
+//     return false;
+//   }
+//
+//   slice1.iter().cmp()
+// }
 
+pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, timestamp: u64) {
   match thread {
     Thread::Contact(uuid) => {
-      for chat in model.chats {
+      for chat in &mut model.chats {
         if chat.participants.members == [uuid] {
           chat.update(message, uuid, timestamp);
           return;

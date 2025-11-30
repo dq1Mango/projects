@@ -1021,7 +1021,7 @@ async fn real_main() -> color_eyre::Result<()> {
     let msg = action_rx.recv().await;
 
     match msg {
-      Some(Action::Receive(receive)) => match receive {
+      Some(Action::Receive(ref receive)) => match receive {
         Received::QueueEmpty => break,
         Received::Contacts => Logger::log("we gyatt some contacts".to_string()),
         Received::Content(content) => {
@@ -1030,7 +1030,9 @@ async fn real_main() -> color_eyre::Result<()> {
             _ => {}
           }
 
-          loading_model.latest_timestamp = Some(content.metadata.timestamp)
+          loading_model.latest_timestamp = Some(content.metadata.timestamp);
+
+          update(&mut model, msg.expect("the laws of physics have collapsed"), logger);
         }
       },
 
