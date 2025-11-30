@@ -321,6 +321,12 @@ impl Model {
   fn current_chat(&mut self) -> &mut Chat {
     &mut self.chats[self.chat_index]
   }
+
+  fn new_chat(&mut self, uuid: Uuid) {
+    let chat = Chat::new(uuid);
+
+    self.chats.push(chat);
+  }
 }
 
 impl TextInput {
@@ -521,6 +527,19 @@ fn _format_vec(vec: &Vec<String>) -> String {
 }
 
 impl Chat {
+  fn new(uuid: Uuid) -> Self {
+    Chat {
+      participants: Group {
+        name: "plz work".to_string(),
+        _description: "".to_string(),
+        members: vec![uuid],
+      },
+      messages: Vec::new(),
+      text_input: TextInput::default(),
+      location: Location::zero(),
+    }
+  }
+
   fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, contacts: Contacts) {
     let input_lines = self.text_input.body.rows(area.width - 3);
     // Logger::log("this is our input: ".to_string());
@@ -666,6 +685,16 @@ impl Chat {
 
     // goto considered harmful lmao
     self.messages.insert(i, parsed_message);
+  }
+}
+
+impl Location {
+  fn zero() -> Self {
+    Self {
+      index: 0,
+      offset: 0,
+      requested_scroll: 0,
+    }
   }
 }
 
