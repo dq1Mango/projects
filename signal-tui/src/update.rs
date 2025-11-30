@@ -174,7 +174,8 @@ async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, R
       continue;
     } else {
       let profile_key = Some(ProfileKey::create(contact.profile_key.try_into().expect("we tried")));
-      let profile = retrieve_profile(manager, contact.uuid, profile_key);
+      let profile = retrieve_profile(manager, contact.uuid, profile_key).await?;
+      model.contacts.insert(contact.uuid, profile);
     }
   }
   Ok(())
