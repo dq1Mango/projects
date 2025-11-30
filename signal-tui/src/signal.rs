@@ -15,6 +15,7 @@ use futures::StreamExt;
 use futures::{channel::oneshot, future, pin_mut};
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use notify_rust::Notification;
+use presage::Error;
 use presage::libsignal_service::configuration::SignalServers;
 use presage::libsignal_service::content::Reaction;
 use presage::libsignal_service::pre_keys::PreKeysStore;
@@ -28,6 +29,7 @@ use presage::libsignal_service::sender::AttachmentSpec;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::model::contacts::Contact;
 use presage::model::groups::Group;
+use presage::model::identity::OnNewIdentity;
 use presage::model::messages::Received;
 use presage::proto::EditMessage;
 use presage::proto::ReceiptMessage;
@@ -40,8 +42,10 @@ use presage::{
   manager::Registered,
   store::{Store, Thread},
 };
+use presage_store_sqlite::SqliteStore;
 use tempfile::Builder;
 use tempfile::TempDir;
+use tokio::task::spawn_local;
 use tokio::time::sleep;
 use tokio::{
   fs,
@@ -52,6 +56,7 @@ use tracing::warn;
 use tracing::{error, info};
 use url::Url;
 
+use crate::Profile;
 use crate::logger::Logger;
 // #[derive(Parser)]
 // #[clap(about = "a basic signal CLI to try things out")]
@@ -88,13 +93,13 @@ pub enum Cmd {
     force: bool,
   },
   // #[clap(about = "Create QR code (URL) and wait until this device is linked as new secondary")]
-  LinkDevice {
-    /// Possible values: staging, production
-    // #[clap(long, short = 's', default_value = "production")]
-    servers: SignalServers,
-    // #[clap(long, short = 'n', help = "Name of the device to register in the primary client")]
-    device_name: String,
-  },
+  // LinkDevice {
+  //   /// Possible values: staging, production
+  //   // #[clap(long, short = 's', default_value = "production")]
+  //   servers: SignalServers,
+  //   // #[clap(long, short = 'n', help = "Name of the device to register in the primary client")]
+  //   device_name: String,
+  // },
   // #[clap(about = "Add a new secondary device to this (primary) device via URL (see link-device)")]
   AddDevice {
     // #[clap(
@@ -372,17 +377,19 @@ async fn print_message<S: Store>(manager: &Manager<S, Registered>, notifications
     match data_message {
       DataMessage {
         quote: Some(Quote {
-          text: Some(quoted_text), ..
+          text: Some(quoted_text),
+          ..
         }),
         body: Some(body),
         ..
       } => Some(format!("Answer to message \"{quoted_text}\": {body}")),
       DataMessage {
-        reaction: Some(Reaction {
-          target_sent_timestamp: Some(ts),
-          emoji: Some(emoji),
-          ..
-        }),
+        reaction:
+          Some(Reaction {
+            target_sent_timestamp: Some(ts),
+            emoji: Some(emoji),
+            ..
+          }),
         ..
       } => {
         let Ok(Some(message)) = manager.store().message(thread, *ts).await else {
@@ -526,14 +533,64 @@ async fn receive<S: Store>(
   while let Some(content) = messages.next().await {
     match &content {
       Received::QueueEmpty => {} //println!("done with synchronization"),
-      Received::Contacts => {}   //println!("got contacts synchronization"),
-      Received::Content(content) => process_incoming_message(manager, attachments_tmp_dir.path(), notifications, &content).await,
+      Received::Contacts => {
+        //println!("got contacts synchronization"),
+      }
+      Received::Content(content) => {
+        process_incoming_message(manager, attachments_tmp_dir.path(), notifications, &content).await
+      }
     }
 
     _ = output.send(Action::Receive(content));
   }
 
   Ok(())
+}
+
+pub fn link_device(servers: SignalServers, device_name: String, output: mpsc::UnboundedSender<Action>) {
+  spawn_local(async move {
+    let db_path = "/home/mqngo/Coding/rust/signal-tui/plzwork.db3";
+
+    let config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust)
+      .await
+      .unwrap();
+
+    let (provisioning_link_tx, provisioning_link_rx) = oneshot::channel();
+    let output1 = output.clone();
+    Logger::log(format!("about to send something, but gonna sleep a little first"));
+    sleep(Duration::from_secs(2)).await;
+
+    let manager = future::join(
+      async move {
+        sleep(Duration::from_secs(2)).await;
+        Logger::log(format!("this isnt even my fault ..."));
+        Manager::link_secondary_device(config_store, servers, device_name, provisioning_link_tx).await
+      },
+      async move {
+        Logger::log(format!("about to send something, feeling nervous"));
+        match provisioning_link_rx.await {
+          Ok(url) => {
+            _ = output1.send(Action::Link(LinkingAction::Url(url)));
+          }
+          Err(error) => error!(%error, "linking device was cancelled"),
+        }
+      },
+    )
+    .await;
+    Logger::log(format!("i think it worked !!"));
+
+    match manager {
+      (Ok(manager), _) => {
+        _ = output.send(Action::Link(LinkingAction::Success));
+        // let whoami = manager.whoami().await.unwrap();
+        // println!("{whoami:?}");
+      }
+      (Err(err), _) => {
+        _ = output.send(Action::Link(LinkingAction::Fail));
+        // println!("{err:?}");
+      }
+    }
+  });
 }
 
 // pub async fn _link_device<S: Store>(data: Cmd, config_store: S, sender: Sender<LinkingAction>) -> anyhow::Result<()> {
@@ -574,10 +631,57 @@ async fn receive<S: Store>(
 //   Ok(())
 // }
 
+pub async fn get_contacts<S: Store>(manager: &Manager<S, Registered>) -> Result<Vec<Contact>, Error<S::Error>> {
+  let mut contacts = Vec::new();
+  for contact in manager.store().contacts().await?.flatten() {
+    contacts.push(contact);
+  }
+
+  Ok(contacts)
+}
+
+pub async fn retrieve_profile<S: Store>(
+  manager: &mut Manager<S, Registered>,
+  uuid: Uuid,
+  mut profile_key: Option<ProfileKey>,
+) -> anyhow::Result<Profile> {
+  if profile_key.is_none() {
+    for contact in manager
+      .store()
+      .contacts()
+      .await?
+      .filter_map(Result::ok)
+      .filter(|c| c.uuid == uuid)
+    {
+      let profilek: [u8; 32] = match (contact.profile_key).try_into() {
+        Ok(profilek) => profilek,
+        Err(_) => bail!(
+          "Profile key is not 32 bytes or empty for uuid: {:?} and no alternative profile key was provided",
+          uuid
+        ),
+      };
+      profile_key = Some(ProfileKey::create(profilek));
+    }
+  } else {
+    println!("Retrieving profile for: {uuid:?} with profile_key");
+  }
+  let profile = match profile_key {
+    None => manager.retrieve_profile().await?,
+    Some(profile_key) => manager.retrieve_profile_by_uuid(uuid, profile_key).await?,
+  };
+  // println!("{profile:#?}");
+
+  Ok(profile)
+}
+
 use crate::update::Action;
 use crate::update::LinkingAction;
 
-pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::UnboundedSender<Action>) -> anyhow::Result<()> {
+pub async fn run<S: Store>(
+  manager: &mut Manager<S, Registered>,
+  subcommand: Cmd,
+  output: mpsc::UnboundedSender<Action>,
+) -> anyhow::Result<()> {
   match subcommand {
     Cmd::Register {
       servers,
@@ -611,60 +715,25 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
     //   }
     // }
     //
-    Cmd::LinkDevice { servers, device_name } => {
-      let (provisioning_link_tx, provisioning_link_rx) = oneshot::channel();
-      let output1 = output.clone();
-      Logger::log(format!("about to send something, but gonna sleep a little first"));
-      sleep(Duration::from_secs(2)).await;
-      let manager = future::join(
-        async move {
-          sleep(Duration::from_secs(2)).await;
-          Logger::log(format!("this isnt even my fault ..."));
-          Manager::link_secondary_device(config_store, servers, device_name, provisioning_link_tx).await
-        },
-        async move {
-          Logger::log(format!("about to send something, feeling nervous"));
-          match provisioning_link_rx.await {
-            Ok(url) => {
-              _ = output1.send(Action::Link(LinkingAction::Url(url)));
-            }
-            Err(error) => error!(%error, "linking device was cancelled"),
-          }
-        },
-      )
-      .await;
-      Logger::log(format!("i think it worked !!"));
-
-      match manager {
-        (Ok(manager), _) => {
-          _ = output.send(Action::Link(LinkingAction::Success));
-          // let whoami = manager.whoami().await.unwrap();
-          // println!("{whoami:?}");
-        }
-        (Err(err), _) => {
-          _ = output.send(Action::Link(LinkingAction::Fail));
-          // println!("{err:?}");
-        }
-      }
-    }
     Cmd::AddDevice { url } => {
-      let mut manager = Manager::load_registered(config_store).await?;
       manager.link_secondary(url).await?;
       println!("Added new secondary device");
     }
     Cmd::UnlinkDevice { device_id } => {
-      let manager = Manager::load_registered(config_store).await?;
       manager.unlink_secondary(device_id).await?;
       println!("Unlinked device with id: {}", device_id);
     }
     Cmd::ListDevices => {
-      let manager = Manager::load_registered(config_store).await?;
       let devices = manager.devices().await?;
       let current_device_id: u8 = manager.device_id().into();
 
       for device in devices {
         let device_name = device.name.unwrap_or_else(|| "(no device name)".to_string());
-        let current_marker = if device.id == current_device_id { "(this device)" } else { "" };
+        let current_marker = if device.id == current_device_id {
+          "(this device)"
+        } else {
+          ""
+        };
 
         println!(
           "- Device {} {}\n  Name: {}\n  Created: {}\n  Last seen: {}",
@@ -673,15 +742,13 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       }
     }
     Cmd::Receive { notifications } => {
-      let mut manager = Manager::load_registered(config_store).await?;
-      receive(&mut manager, notifications, output).await?;
+      receive(manager, notifications, output).await?;
     }
     Cmd::Send {
       uuid,
       message,
       attachment_filepath,
     } => {
-      let mut manager = Manager::load_registered(config_store).await?;
       let attachments = upload_attachments(attachment_filepath, &manager).await?;
       let data_message = DataMessage {
         body: Some(message),
@@ -689,14 +756,13 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
         ..Default::default()
       };
 
-      send(&mut manager, Recipient::Contact(uuid), data_message).await?;
+      send(manager, Recipient::Contact(uuid), data_message).await?;
     }
     Cmd::SendToGroup {
       message,
       master_key,
       attachment_filepath,
     } => {
-      let mut manager = Manager::load_registered(config_store).await?;
       let attachments = upload_attachments(attachment_filepath, &manager).await?;
       let data_message = DataMessage {
         body: Some(message),
@@ -709,38 +775,10 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
         ..Default::default()
       };
 
-      send(&mut manager, Recipient::Group(master_key), data_message).await?;
+      send(manager, Recipient::Group(master_key), data_message).await?;
     }
-    Cmd::RetrieveProfile { uuid, mut profile_key } => {
-      let mut manager = Manager::load_registered(config_store).await?;
-      if profile_key.is_none() {
-        for contact in manager
-          .store()
-          .contacts()
-          .await?
-          .filter_map(Result::ok)
-          .filter(|c| c.uuid == uuid)
-        {
-          let profilek: [u8; 32] = match (contact.profile_key).try_into() {
-            Ok(profilek) => profilek,
-            Err(_) => bail!(
-              "Profile key is not 32 bytes or empty for uuid: {:?} and no alternative profile key was provided",
-              uuid
-            ),
-          };
-          profile_key = Some(ProfileKey::create(profilek));
-        }
-      } else {
-        println!("Retrieving profile for: {uuid:?} with profile_key");
-      }
-      let profile = match profile_key {
-        None => manager.retrieve_profile().await?,
-        Some(profile_key) => manager.retrieve_profile_by_uuid(uuid, profile_key).await?,
-      };
-      println!("{profile:#?}");
-    }
+    Cmd::RetrieveProfile { uuid, mut profile_key } => {}
     Cmd::ListGroups => {
-      let manager = Manager::load_registered(config_store).await?;
       for group in manager.store().groups().await? {
         match group {
           Ok((
@@ -766,7 +804,6 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       }
     }
     Cmd::ListContacts => {
-      let manager = Manager::load_registered(config_store).await?;
       for Contact {
         name,
         uuid,
@@ -778,7 +815,6 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       }
     }
     Cmd::ListStickerPacks => {
-      let manager = Manager::load_registered(config_store).await?;
       for sticker_pack in manager.store().sticker_packs().await? {
         match sticker_pack {
           Ok(sticker_pack) => {
@@ -803,22 +839,17 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       }
     }
     Cmd::Whoami => {
-      let manager = Manager::load_registered(config_store).await?;
       println!("{:?}", &manager.whoami().await?);
     }
-    Cmd::GetContact { ref uuid } => {
-      let manager = Manager::load_registered(config_store).await?;
-      match manager.store().contact_by_id(uuid).await? {
-        Some(contact) => println!("{contact:#?}"),
-        None => eprintln!("Could not find contact for {uuid}"),
-      }
-    }
+    Cmd::GetContact { ref uuid } => match manager.store().contact_by_id(uuid).await? {
+      Some(contact) => println!("{contact:#?}"),
+      None => eprintln!("Could not find contact for {uuid}"),
+    },
     Cmd::FindContact {
       uuid,
       phone_number,
       ref name,
     } => {
-      let manager = Manager::load_registered(config_store).await?;
       for contact in manager
         .store()
         .contacts()
@@ -832,7 +863,6 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       }
     }
     Cmd::SyncContacts => {
-      let mut manager = Manager::load_registered(config_store).await?;
       manager.request_contacts().await?;
 
       let messages = manager
@@ -856,7 +886,6 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       recipient_uuid,
       from,
     } => {
-      let manager = Manager::load_registered(config_store).await?;
       let thread = match (group_master_key, recipient_uuid) {
         (Some(master_key), _) => Thread::Group(master_key),
         (_, Some(uuid)) => Thread::Contact(uuid),
@@ -872,8 +901,6 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       }
     }
     Cmd::Stats => {
-      let manager = Manager::load_registered(config_store).await?;
-
       #[allow(unused)]
       #[derive(Debug)]
       struct Stats {
@@ -914,6 +941,7 @@ pub async fn run<S: Store>(subcommand: Cmd, config_store: S, output: mpsc::Unbou
       println!("{stats:#?}")
     }
   }
+
   Ok(())
 }
 
@@ -946,7 +974,11 @@ async fn upload_attachments<S: Store>(
     })
     .collect();
 
-  let attachments: Result<Vec<_>, _> = manager.upload_attachments(attachment_specs).await?.into_iter().collect();
+  let attachments: Result<Vec<_>, _> = manager
+    .upload_attachments(attachment_specs)
+    .await?
+    .into_iter()
+    .collect();
 
   let attachments = attachments?;
   Ok(attachments)

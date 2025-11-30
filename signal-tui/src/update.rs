@@ -4,13 +4,22 @@ use crossterm::event::{self, Event, EventStream, KeyCode};
 
 use futures::{StreamExt, future::FutureExt};
 
+use anyhow::anyhow;
+
 // use presage::model::messages::Received;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+use presage::libsignal_service::prelude::ProfileKey;
 use presage::proto::DataMessage;
 use presage::store::ContentExt;
 use presage::store::Thread;
 
+use presage::Manager;
+use presage::manager::Registered;
+
 use crate::logger::Logger;
+use crate::mysignal::SignalSpawner;
+use crate::signal::get_contacts;
+use crate::signal::retrieve_profile;
 use crate::*;
 
 #[derive(PartialEq)]
@@ -87,10 +96,10 @@ pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Actio
   }
 }
 
-pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Action> {
+pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Manager<S, Registered>) -> Option<Action> {
   match msg {
     Action::Type(char) => {
-      model.current_chat().text_input.insert_char(char, logger);
+      model.current_chat().text_input.insert_char(char);
     }
     Action::Backspace => model.current_chat().text_input.delete_char(),
 
@@ -121,6 +130,7 @@ pub fn update(model: &mut Model, msg: Action, logger: &mut Logger) -> Option<Act
       }
       Received::Contacts => {
         // update our in memory cache of contacts
+        update_contacts(model, manager).await;
       }
       Received::QueueEmpty => {}
     },
@@ -145,6 +155,7 @@ pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, t
   match thread {
     Thread::Contact(uuid) => {
       for chat in &mut model.chats {
+        // maybe this rust thing isnt so bad (jk lol)
         if chat.participants.members == [uuid] {
           chat.update(message, uuid, timestamp);
           return;
@@ -155,6 +166,18 @@ pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, t
     }
     _ => {}
   }
+}
+
+async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, Registered>) -> anyhow::Result<()> {
+  for contact in get_contacts(manager).await? {
+    if model.contacts.contains_key(&contact.uuid) {
+      continue;
+    } else {
+      let profile_key = Some(ProfileKey::create(contact.profile_key.try_into().expect("we tried")));
+      let profile = retrieve_profile(manager, contact.uuid, profile_key);
+    }
+  }
+  Ok(())
 }
 
 // async fn print_message<S: Store>(manager: &Manager<S, Registered>, notifications: bool, content: &Content) {

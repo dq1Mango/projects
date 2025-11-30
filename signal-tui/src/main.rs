@@ -24,6 +24,7 @@ use presage::libsignal_service::{
   profile_name::ProfileName,
 };
 
+use presage::manager::Manager;
 use presage::model::messages::Received;
 use presage::store::{StateStore, Store, Thread};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
@@ -46,8 +47,13 @@ use url::Url;
 use qrcodegen::QrCode;
 use qrcodegen::QrCodeEcc;
 // use crate::signal::*;
+use crate::signal::link_device;
 use crate::update::*;
 use crate::{logger::Logger, model::MultiLineString, mysignal::SignalSpawner, signal::Cmd, update::LinkingAction};
+
+// there are three different models to represent all the parts of linking a device, loading
+// past messages, and normal operation, which is ugly dont get me wrong, but i feel like
+// cramming them all in one struct would be worse
 
 // #[derive(Debug, Default)]
 pub struct Model {
@@ -357,7 +363,7 @@ impl TextInput {
     pos
   }
 
-  fn insert_char(&mut self, char: char, _logger: &mut Logger) {
+  fn insert_char(&mut self, char: char) {
     // some disgusting object-oriented blashphemy going on here
     self.body.body.insert(self.cursor_index as usize, char);
     self.cursor_index += 1;
@@ -956,11 +962,9 @@ async fn real_main() -> color_eyre::Result<()> {
     handle_crossterm_events(action_tx1, &mode).await;
   });
 
-  let spawner = SignalSpawner::new(action_tx.clone());
-
   // let db_path = default_db_path();
   let db_path = "/home/mqngo/Coding/rust/signal-tui/plzwork.db3";
-  let config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust).await?;
+  let mut config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust).await?;
 
   // tokio::spawn(run(
   //   Cmd::LinkDevice {
@@ -971,13 +975,20 @@ async fn real_main() -> color_eyre::Result<()> {
   //   action_tx.clone(),
   // ));
 
+  // link device if not already
   if !config_store.is_registered().await {
     let mut linking_model = LinkState { url: None };
 
-    spawner.spawn(Cmd::LinkDevice {
-      servers: SignalServers::Production,
-      device_name: "terminal enjoyer".to_string(),
-    });
+    link_device(
+      SignalServers::Production,
+      "terminal enjoyer".to_string(),
+      action_tx.clone(),
+    );
+
+    // spawner.spawn(Cmd::LinkDevice {
+    //   servers: SignalServers::Production,
+    //   device_name: "terminal enjoyer".to_string(),
+    // });
     //
 
     loop {
@@ -990,10 +1001,15 @@ async fn real_main() -> color_eyre::Result<()> {
         Some(Action::Link(linking)) => match linking {
           LinkingAction::Url(url) => linking_model.url = Some(url),
           LinkingAction::Success => break,
-          LinkingAction::Fail => spawner.spawn(Cmd::LinkDevice {
-            servers: SignalServers::Production,
-            device_name: "terminal enjoyer".to_string(),
-          }),
+          LinkingAction::Fail => link_device(
+            SignalServers::Production,
+            "terminal enjoyer".to_string(),
+            action_tx.clone(),
+          ),
+          //   spawner.spawn(Cmd::LinkDevice {
+          //   servers: SignalServers::Production,
+          //   device_name: "terminal enjoyer".to_string(),
+          // }),
         },
 
         Some(Action::Quit) => {
@@ -1007,19 +1023,32 @@ async fn real_main() -> color_eyre::Result<()> {
         }
       }
     }
+
+    // there probably a better way to make the store linked but this only happens once so idc
+    config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust).await?;
   }
 
-  spawner.spawn(Cmd::Receive { notifications: false });
+  let mut manager = Manager::load_registered(config_store)
+    .await
+    .expect("why even try anymore?");
+
+  let listener = SignalSpawner::new(action_tx.clone());
+
+  // receive all past messages
+  listener.spawn(Cmd::Receive { notifications: false });
 
   let mut loading_model = LoadState {
     raw_duration: None,
     latest_timestamp: None,
   };
+
   loop {
     terminal.draw(|f| draw_loading_sreen(&loading_model, f))?;
 
     let msg = action_rx.recv().await;
 
+    // this whole thing is really ugly, im basically stuffing all the parts of TEA into this loop,
+    // while also calling the normal update function for the main model
     match msg {
       Some(Action::Receive(ref receive)) => match receive {
         Received::QueueEmpty => break,
@@ -1032,7 +1061,12 @@ async fn real_main() -> color_eyre::Result<()> {
 
           loading_model.latest_timestamp = Some(content.metadata.timestamp);
 
-          update(&mut model, msg.expect("the laws of physics have collapsed"), logger);
+          update(
+            &mut model,
+            msg.expect("the laws of physics have collapsed"),
+            &mut manager,
+          )
+          .await;
         }
       },
 
@@ -1048,6 +1082,8 @@ async fn real_main() -> color_eyre::Result<()> {
     }
   }
 
+  let spawner = SignalSpawner::new(action_tx.clone());
+
   while model.running_state != RunningState::OhShit {
     // Render the current view
     terminal.draw(|f| view(&mut model, f, settings))?;
@@ -1057,7 +1093,7 @@ async fn real_main() -> color_eyre::Result<()> {
 
     // Process updates as long as they return a non-None message
     while current_msg.is_some() {
-      current_msg = update(&mut model, current_msg.unwrap(), logger);
+      current_msg = update(&mut model, current_msg.unwrap(), &mut manager).await;
     }
   }
 
