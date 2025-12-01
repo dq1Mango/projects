@@ -1061,6 +1061,8 @@ async fn real_main() -> color_eyre::Result<()> {
     .await
     .expect("why even try anymore?");
 
+  action_tx.send(Action::Receive(Received::Contacts));
+
   let listener = SignalSpawner::new(action_tx.clone());
 
   // receive all past messages

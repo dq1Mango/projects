@@ -16,6 +16,8 @@ use presage::store::Thread;
 use presage::Manager;
 use presage::manager::Registered;
 
+use std::sync::Arc;
+
 use crate::logger::Logger;
 use crate::mysignal::SignalSpawner;
 use crate::signal::get_contacts;
@@ -175,7 +177,13 @@ async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, R
     } else {
       let profile_key = Some(ProfileKey::create(contact.profile_key.try_into().expect("we tried")));
       let profile = retrieve_profile(manager, contact.uuid, profile_key).await?;
-      model.contacts.insert(contact.uuid, profile);
+
+      let Some(mut contacts) = Arc::get_mut(&mut model.contacts) else {
+        Logger::log("didnt get off so easy".to_string());
+        return Ok(());
+      };
+
+      contacts.insert(contact.uuid, profile);
     }
   }
   Ok(())
