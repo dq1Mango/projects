@@ -645,15 +645,25 @@ impl Chat {
     self.text_input.render(layout[1], buf);
   }
 
-  fn last_message(&self) -> &Message {
-    let last = self.messages.len() - 1;
-    &self.messages[last]
+  fn last_message(&self) -> Option<&Message> {
+    let last = self.messages.len();
+    if last <= 0 {
+      None
+    } else {
+      Some(&self.messages[last - 1])
+    }
   }
 
   fn update(&mut self, message: DataMessage, sender: Uuid, timestamp: u64) {
     // let new_timestamp = message.timestamp();
 
-    let mut i = self.messages.len() - 1;
+    let mut i = self.messages.len();
+
+    // dont underflow the usize lol
+    if i > 0 {
+      i -= 1;
+    }
+
     while i > 0 {
       let ts = match &self.messages[i].metadata {
         Metadata::MyMessage(data) => data.sent.timestamp_millis() as u64,
@@ -796,22 +806,24 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
   // None => {}
   // }
 
-  let last_message = chat.last_message();
-  let group = &chat.participants;
+  // display the last message sent in the chat if there was one (there usually will be one)
+  if let Some(last_message) = chat.last_message() {
+    let group = &chat.participants;
 
-  let message_text: Vec<String> = last_message.body.fit(layout[1].width, layout[1].height - 1);
+    let message_text: Vec<String> = last_message.body.fit(layout[1].width, layout[1].height - 1);
 
-  let mut innner_lines: Vec<Line> = vec![Line::from(group.name.shrink(layout[1].width).bold())];
+    let mut innner_lines: Vec<Line> = vec![Line::from(group.name.shrink(layout[1].width).bold())];
 
-  for line in message_text {
-    innner_lines.push(Line::from(line));
+    for line in message_text {
+      innner_lines.push(Line::from(line));
+    }
+
+    Paragraph::new(innner_lines).render(layout[1], buf);
+
+    let time = last_message.format_duration();
+
+    Paragraph::new(vec![Line::from(time), last_message.format_delivered_status()]).render(layout[2], buf);
   }
-
-  Paragraph::new(innner_lines).render(layout[1], buf);
-
-  let time = last_message.format_duration();
-
-  Paragraph::new(vec![Line::from(time), last_message.format_delivered_status()]).render(layout[2], buf);
 }
 
 // impl Group {
@@ -1081,25 +1093,29 @@ async fn real_main() -> color_eyre::Result<()> {
     // this whole thing is really ugly, im basically stuffing all the parts of TEA into this loop,
     // while also calling the normal update function for the main model
     match msg {
-      Some(Action::Receive(ref receive)) => match receive {
-        Received::QueueEmpty => break,
-        Received::Contacts => Logger::log("we gyatt some contacts".to_string()),
-        Received::Content(content) => {
-          match loading_model.raw_duration {
-            None => loading_model.raw_duration = Some(Utc::now().timestamp_millis() as u64 - content.metadata.timestamp),
-            _ => {}
+      Some(Action::Receive(ref receive)) => {
+        match receive {
+          Received::QueueEmpty => break,
+          Received::Contacts => Logger::log("we gyatt some contacts".to_string()),
+          Received::Content(content) => {
+            match loading_model.raw_duration {
+              None => {
+                loading_model.raw_duration = Some(Utc::now().timestamp_millis() as u64 - content.metadata.timestamp)
+              }
+              _ => {}
+            }
+
+            loading_model.latest_timestamp = Some(content.metadata.timestamp);
           }
-
-          loading_model.latest_timestamp = Some(content.metadata.timestamp);
-
-          update(
-            &mut model,
-            msg.expect("the laws of physics have collapsed"),
-            &mut manager,
-          )
-          .await;
         }
-      },
+
+        update(
+          &mut model,
+          msg.expect("the laws of physics have collapsed"),
+          &mut manager,
+        )
+        .await;
+      }
 
       Some(Action::Quit) => {
         return Ok(());

@@ -171,6 +171,7 @@ pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, t
 }
 
 async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, Registered>) -> anyhow::Result<()> {
+  Logger::log("i gyatt called".to_string());
   for contact in get_contacts(manager).await? {
     if model.contacts.contains_key(&contact.uuid) {
       continue;
@@ -184,6 +185,8 @@ async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, R
       };
 
       contacts.insert(contact.uuid, profile);
+
+      model.new_chat(contact.uuid);
     }
   }
   Ok(())

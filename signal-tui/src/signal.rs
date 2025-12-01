@@ -663,7 +663,7 @@ pub async fn retrieve_profile<S: Store>(
       profile_key = Some(ProfileKey::create(profilek));
     }
   } else {
-    println!("Retrieving profile for: {uuid:?} with profile_key");
+    // println!("Retrieving profile for: {uuid:?} with profile_key");
   }
   let profile = match profile_key {
     None => manager.retrieve_profile().await?,
