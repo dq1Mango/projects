@@ -130,7 +130,8 @@ pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Mana
     Action::Scroll(lines) => model.current_chat().location.requested_scroll = lines,
 
     Action::ScrollGroup(direction) => {
-      model.chat_index = (model.chat_index as isize + direction).clamp(0, model.chats.len() as isize - 1) as usize
+      model.chat_index = (model.chat_index as isize + direction).rem_euclid(model.chats.len() as isize) as usize;
+      //.clamp(0, model.chats.len() as isize - 1) as usize
     }
 
     Action::SetMode(new_mode) => {
@@ -147,16 +148,7 @@ pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Mana
 
     Action::Receive(received) => match received {
       Received::Content(content) => {
-        let ts = content.timestamp();
-        let Ok(thread) = Thread::try_from(&*content) else {
-          Logger::log("failed to derive thread from content".to_string());
-          return None;
-        };
-
-        match content.body {
-          ContentBody::DataMessage(data) => insert_message(model, data, thread, ts),
-          _ => {}
-        }
+        return handle_message(model, *content);
       }
       Received::Contacts => {
         // update our in memory cache of contacts
@@ -181,13 +173,13 @@ pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Mana
 //   slice1.iter().cmp()
 // }
 
-pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, timestamp: u64) {
+pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, timestamp: u64, mine: bool) {
   match thread {
     Thread::Contact(uuid) => {
       for chat in &mut model.chats {
         // maybe this rust thing isnt so bad (jk lol)
         if chat.participants.members == [uuid] {
-          chat.update(message, uuid, timestamp);
+          chat.update(message, uuid, timestamp, mine);
           return;
         }
       }
@@ -196,6 +188,28 @@ pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, t
     }
     _ => {}
   }
+}
+
+fn handle_message(model: &mut Model, content: Content) -> Option<Action> {
+  let ts = content.timestamp();
+  let Ok(thread) = Thread::try_from(&content) else {
+    Logger::log("failed to derive thread from content".to_string());
+    return None;
+  };
+
+  match content.body {
+    ContentBody::DataMessage(data) => insert_message(model, data, thread, ts, false),
+    ContentBody::SynchronizeMessage(data) => {
+      if let Some(sent) = data.sent {
+        if let Some(message) = sent.message {
+          insert_message(model, message, thread, ts, true);
+        }
+      }
+    }
+    _ => {}
+  }
+
+  None
 }
 
 pub async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, Registered>) -> anyhow::Result<()> {
