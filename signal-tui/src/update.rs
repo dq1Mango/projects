@@ -34,7 +34,7 @@ pub enum Action {
   Type(char),
   Backspace,
 
-  Scroll(i16),
+  Scroll(isize),
   ScrollGroup(isize),
 
   SetMode(Mode),
@@ -126,7 +126,11 @@ pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Mana
     }
     Action::Backspace => model.current_chat().text_input.delete_char(),
 
-    Action::Scroll(lines) => model.current_chat().location.requested_scroll = lines,
+    Action::Scroll(lines) => {
+      model.current_chat().location.index = (model.current_chat().location.index as isize + lines)
+        .clamp(0, model.current_chat().messages.len() as isize - 1) as usize;
+      //model.current_chat().location.requested_scroll = lines,
+    }
 
     Action::ScrollGroup(direction) => {
       model.chat_index = (model.chat_index as isize + direction).rem_euclid(model.chats.len() as isize) as usize;
