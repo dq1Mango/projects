@@ -1011,7 +1011,6 @@ fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
 // main ---
 async fn real_main() -> color_eyre::Result<()> {
   // regular lumber jack
-  let logger = &mut Logger::init("log.txt");
   Logger::log("testing".to_string());
 
   // tui::install_panic_hook();
@@ -1154,7 +1153,7 @@ async fn real_main() -> color_eyre::Result<()> {
   }
 
   // action_tx.send(Action::Receive(Received::Contacts));
-  update_contacts(&mut model, &mut manager).await;
+  _ = update_contacts(&mut model, &mut manager).await;
 
   let spawner = SignalSpawner::new(action_tx.clone());
 
@@ -1277,8 +1276,7 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
     }
     Mode::Settings => {
       render_settings(layout[1], frame.buffer_mut(), settings, &model.account);
-    }
-    _ => {}
+    } // _ => {}
   }
 
   //

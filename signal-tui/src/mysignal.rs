@@ -68,7 +68,7 @@ impl SignalSpawner {
         Logger::log(format!("we gyatt a message but before"));
         let cloned_output = output.clone();
 
-        run(&mut manager, new_task, cloned_output).await;
+        _ = run(&mut manager, new_task, cloned_output).await;
       }
       // If the while loop returns, then all the LocalSpawner
       // objects have been dropped.
