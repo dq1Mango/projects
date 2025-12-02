@@ -59,7 +59,7 @@ use crate::{logger::Logger, model::MultiLineString, mysignal::SignalSpawner, sig
 pub struct Model {
   running_state: RunningState,
   mode: Arc<Mutex<Mode>>,
-  focus: Focus,
+  pinned_mode: Mode,
   contacts: Contacts,
   // groups: Vec<Group,
   chats: Vec<Chat>,
@@ -83,11 +83,13 @@ pub enum RunningState {
   OhShit,
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub enum Mode {
   #[default]
   Normal,
   Insert,
+  Groups,
+  Settings,
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -95,6 +97,7 @@ pub enum Focus {
   #[default]
   Chats,
   Settings,
+  Groups,
 }
 
 // #[derive(Debug, Default)]
@@ -156,7 +159,7 @@ impl Clone for PhoneNumber {
 }
 
 #[derive(Debug, Default)]
-struct Group {
+struct MyGroup {
   name: String,
   // icon: Option<MyImageWrapper>,
   members: Vec<Uuid>,
@@ -175,8 +178,8 @@ type Contacts = Arc<HashMap<Uuid, Profile>>;
 
 #[derive(Debug, Default)]
 pub struct Chat {
-  // id: u8,
-  participants: Group,
+  participants: MyGroup,
+  // thread: Thread
   messages: Vec<Message>,
   location: Location,
   text_input: TextInput,
@@ -264,7 +267,7 @@ impl Model {
     // let image = picker.new_resize_protocol(dyn_img.clone());
     // let image2 = picker.new_resize_protocol(dyn_img);
 
-    chat.participants = Group {
+    chat.participants = MyGroup {
       members: vec![dummy_id.clone()],
       name: "group 1".to_string(),
       // icon: Some(MyImageWrapper(image)),
@@ -308,7 +311,8 @@ impl Model {
       account: account,
       running_state: RunningState::Running,
       mode: Arc::new(Mutex::new(Mode::Normal)),
-      focus: Focus::Chats,
+      pinned_mode: Mode::Normal,
+      // focus: Focus::Chats,
     };
     // let mut model = Model::default();
     // model.contacts = contacts;
@@ -322,8 +326,20 @@ impl Model {
     &mut self.chats[self.chat_index]
   }
 
-  fn new_chat(&mut self, uuid: Uuid) {
-    let chat = Chat::new(uuid);
+  fn new_dm_chat(&mut self, profile: Profile, uuid: Uuid) {
+    let chat = Chat::new(MyGroup {
+      name: if let Some(name) = profile.name {
+        name.given_name
+      } else {
+        "".to_string()
+      },
+      _description: if let Some(about) = profile.about {
+        about
+      } else {
+        "".to_string()
+      },
+      members: vec![uuid],
+    });
 
     self.chats.push(chat);
   }
@@ -527,13 +543,10 @@ fn _format_vec(vec: &Vec<String>) -> String {
 }
 
 impl Chat {
-  fn new(uuid: Uuid) -> Self {
+  // TODO: start here and make the group descriptions reflect that of the contact
+  fn new(group: MyGroup) -> Self {
     Chat {
-      participants: Group {
-        name: "plz work".to_string(),
-        _description: "".to_string(),
-        members: vec![uuid],
-      },
+      participants: group,
       messages: Vec::new(),
       text_input: TextInput::default(),
       location: Location::zero(),
@@ -547,6 +560,8 @@ impl Chat {
 
     let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(input_lines + 2)]).split(area);
 
+    self.text_input.render(layout[1], buf);
+
     // kind of a sketchy shadow here but the layout[1] is used like once
     let area = layout[0];
 
@@ -554,6 +569,10 @@ impl Chat {
     // .title(title.centered())
     // .title_bottom(instructions.centered())
     block.render(area, buf);
+
+    if self.messages.len() == 0 {
+      return;
+    }
 
     // shitty temp padding for the border
     let mut area = area;
@@ -641,8 +660,6 @@ impl Chat {
 
       index -= 1;
     }
-
-    self.text_input.render(layout[1], buf);
   }
 
   fn last_message(&self) -> Option<&Message> {
@@ -780,16 +797,25 @@ impl MyMessage {
   }
 }
 
-fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
+fn render_group(chat: &mut Chat, active: bool, hovered: bool, area: Rect, buf: &mut Buffer) {
+  Logger::log(format!("{}", active));
   // let icon = &mut chat.participants.icon;
+  //
+  // Block::bordered().border_set(border::THICK).render(area, buf);
+  //
+  // let mut area = area;
+  // area.x += 1;
+  // area.width -= 2;
+  // area.height -= 2;
+  // area.y += 1;
 
-  Block::bordered().border_set(border::THICK).render(area, buf);
+  let color = if active {
+    if hovered { Color::Magenta } else { Color::Gray }
+  } else {
+    Color::Black
+  };
 
-  let mut area = area;
-  area.x += 1;
-  area.width -= 2;
-  area.height -= 2;
-  area.y += 1;
+  let area = pad_with_border(color, area, buf);
 
   let layout = Layout::horizontal([Constraint::Length(7), Constraint::Min(15), Constraint::Length(6)]).split(area);
 
@@ -805,25 +831,23 @@ fn render_group(chat: &mut Chat, area: Rect, buf: &mut Buffer) {
   // Some(image) => StatefulImage::new().render(area, buf, &mut image.0),
   // None => {}
   // }
+  let group = &chat.participants;
+  let mut innner_lines: Vec<Line> = vec![Line::from(group.name.shrink(layout[1].width).bold())];
 
   // display the last message sent in the chat if there was one (there usually will be one)
   if let Some(last_message) = chat.last_message() {
-    let group = &chat.participants;
-
     let message_text: Vec<String> = last_message.body.fit(layout[1].width, layout[1].height - 1);
-
-    let mut innner_lines: Vec<Line> = vec![Line::from(group.name.shrink(layout[1].width).bold())];
 
     for line in message_text {
       innner_lines.push(Line::from(line));
     }
 
-    Paragraph::new(innner_lines).render(layout[1], buf);
-
     let time = last_message.format_duration();
 
     Paragraph::new(vec![Line::from(time), last_message.format_delivered_status()]).render(layout[2], buf);
   }
+
+  Paragraph::new(innner_lines).render(layout[1], buf);
 }
 
 // impl Group {
@@ -878,7 +902,7 @@ fn draw_linking_screen(state: &LinkState, frame: &mut Frame) {
   let area = frame.area();
   let buffer = frame.buffer_mut();
 
-  let area = pad_with_border(area, buffer);
+  let area = pad_with_border(Color::White, area, buffer);
 
   let mut size: u16 = 1;
 
@@ -939,7 +963,7 @@ fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
   let area = frame.area();
   let buf = frame.buffer_mut();
 
-  let mut area = pad_with_border(area, buf);
+  let mut area = pad_with_border(Color::White, area, buf);
 
   area.y += 1;
 
@@ -962,7 +986,7 @@ fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
 
       let area = center_div(area, Constraint::Percentage(40), Constraint::Percentage(20));
 
-      let mut area = pad_with_border(area, buf);
+      let mut area = pad_with_border(Color::White, area, buf);
 
       Line::from(["Loading messages from ", &formatted_duration].concat())
         .centered()
@@ -1206,7 +1230,13 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
 
   while contact_area.y < layout[0].height && index < model.chats.len() {
     let chat = &mut model.chats[index];
-    render_group(chat, contact_area, frame.buffer_mut());
+    render_group(
+      chat,
+      index == model.chat_index,
+      model.pinned_mode == Mode::Groups,
+      contact_area,
+      frame.buffer_mut(),
+    );
     // let last = &(&mut model.chats)[index].last_message();
     // model.chats[index].participants.render(last, contact_area, frame.buffer_mut());
     contact_area.y += contact_height;
@@ -1216,17 +1246,18 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
   // wow im good at coding
   let contacts = Arc::clone(&model.contacts);
 
-  match model.focus {
-    Focus::Chats => {
+  match model.pinned_mode {
+    Mode::Insert | Mode::Normal | Mode::Groups => {
       model
         .current_chat()
         .render(layout[1], frame.buffer_mut(), settings, contacts);
 
       frame.set_cursor_position(model.current_chat().text_input.cursor_position);
     }
-    Focus::Settings => {
+    Mode::Settings => {
       render_settings(layout[1], frame.buffer_mut(), settings, &model.account);
     }
+    _ => {}
   }
 
   //
@@ -1242,8 +1273,11 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
   // frame.render_widget(p, test_rect);
 }
 
-fn pad_with_border(area: Rect, buf: &mut Buffer) -> Rect {
-  Block::bordered().border_set(border::THICK).render(area, buf);
+fn pad_with_border(color: Color, area: Rect, buf: &mut Buffer) -> Rect {
+  Block::bordered()
+    .border_set(border::THICK)
+    .border_style(Style::default().fg(color))
+    .render(area, buf);
 
   Rect {
     x: area.x + 1,
@@ -1260,7 +1294,7 @@ fn pad_with_border(area: Rect, buf: &mut Buffer) -> Rect {
 }
 
 fn render_settings(area: Rect, buf: &mut Buffer, _settings: &Settings, account: &Account) {
-  let area = pad_with_border(area, buf);
+  let area = pad_with_border(Color::Reset, area, buf);
 
   let info = vec![
     Line::from("Name: ".to_string() + &account.name),

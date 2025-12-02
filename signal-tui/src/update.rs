@@ -34,7 +34,9 @@ pub enum LinkingAction {
 pub enum Action {
   Type(char),
   Backspace,
+
   Scroll(i16),
+  ScrollGroup(isize),
 
   SetMode(Mode),
   SetFocus(Focus),
@@ -74,6 +76,7 @@ pub async fn handle_crossterm_events(tx: UnboundedSender<Action>, mode: &Arc<Mut
 }
 
 pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Action> {
+  // the settings focus isnt super real yet so idk what im doing
   match *mode.lock().unwrap() {
     Mode::Insert => match key.code {
       KeyCode::Esc => Some(Action::SetMode(Mode::Normal)),
@@ -82,6 +85,7 @@ pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Actio
       KeyCode::Backspace => Some(Action::Backspace),
       _ => None,
     },
+
     Mode::Normal => match key.code {
       KeyCode::Char('j') => Some(Action::Scroll(-1)),
       KeyCode::Char('k') => Some(Action::Scroll(1)),
@@ -89,9 +93,27 @@ pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Actio
       KeyCode::Char('u') => Some(Action::Scroll(10)),
 
       KeyCode::Char('i') => Some(Action::SetMode(Mode::Insert)),
+      KeyCode::Char('h') => Some(Action::SetMode(Mode::Groups)),
+
       KeyCode::Char('S') => Some(Action::SetFocus(Focus::Settings)),
-      KeyCode::Char('C') => Some(Action::SetFocus(Focus::Chats)),
-      // KeyCode::Char('k') => Some(Action::Decrement),
+
+      KeyCode::Char('q') => Some(Action::Quit),
+      _ => None,
+    },
+
+    Mode::Groups => match key.code {
+      KeyCode::Char('j') => Some(Action::ScrollGroup(1)),
+      KeyCode::Char('k') => Some(Action::ScrollGroup(-1)),
+
+      KeyCode::Char('l') => Some(Action::SetMode(Mode::Groups)),
+
+      KeyCode::Char('q') => Some(Action::Quit),
+      _ => None,
+    },
+
+    Mode::Settings => match key.code {
+      KeyCode::Char('l') => Some(Action::SetFocus(Focus::Chats)),
+
       KeyCode::Char('q') => Some(Action::Quit),
       _ => None,
     },
@@ -107,10 +129,16 @@ pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Mana
 
     Action::Scroll(lines) => model.current_chat().location.requested_scroll = lines,
 
-    Action::SetMode(new_mode) => *model.mode.lock().unwrap() = new_mode,
+    Action::ScrollGroup(direction) => {
+      model.chat_index = (model.chat_index as isize + direction).clamp(0, model.chats.len() as isize) as usize
+    }
 
-    Action::SetFocus(new_focus) => model.focus = new_focus,
+    Action::SetMode(new_mode) => {
+      *model.mode.lock().unwrap() = new_mode.clone();
+      model.pinned_mode = new_mode;
+    }
 
+    // Action::SetFocus(new_focus) => model.focus = new_focus,
     Action::Quit => {
       // You can handle cleanup and exit here
       // -- im ok thanks tho
@@ -184,9 +212,9 @@ async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, R
         return Ok(());
       };
 
-      contacts.insert(contact.uuid, profile);
+      contacts.insert(contact.uuid, profile.clone());
 
-      model.new_chat(contact.uuid);
+      model.new_dm_chat(profile, contact.uuid);
     }
   }
   Ok(())
