@@ -19,7 +19,6 @@ use presage::manager::Registered;
 use std::sync::Arc;
 
 use crate::logger::Logger;
-use crate::mysignal::SignalSpawner;
 use crate::signal::get_contacts;
 use crate::signal::retrieve_profile;
 use crate::*;
@@ -152,7 +151,7 @@ pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Mana
       }
       Received::Contacts => {
         // update our in memory cache of contacts
-        update_contacts(model, manager).await;
+        _ = update_contacts(model, manager).await;
       }
       Received::QueueEmpty => {}
     },
