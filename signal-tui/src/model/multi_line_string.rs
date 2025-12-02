@@ -10,6 +10,15 @@ pub struct MultiLineString {
   cached_length: u16,
 }
 
+fn string_from_chars(chars: &[char]) -> String {
+  let mut string = String::new();
+  for chr in chars {
+    string.push_str(&chr.to_string());
+  }
+
+  string
+}
+
 impl MultiLineString {
   pub fn new(str: &str) -> Self {
     Self {
@@ -20,6 +29,7 @@ impl MultiLineString {
     }
   }
 
+  // I hate handling utf-8
   fn calc_lines(&self, width: u16) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut new_line = String::from("");
@@ -31,12 +41,13 @@ impl MultiLineString {
 
     // this .split() is a little sketchy but it works mostly
     for yap in self.body.split(" ") {
-      let mut length = yap.len();
+      let yap = yap.chars();
+      let mut length = yap.clone().count();
 
-      if coldex + yap.len() <= availible_width || yap == "" {
-        new_line.push_str(yap);
+      if coldex + length <= availible_width || length == 0 {
+        new_line.push_str(yap.as_str());
         new_line.push_str(" ");
-        coldex += yap.len() + 1;
+        coldex += length + 1;
       } else {
         // INCOMPLETE LOGIC!!!
         if new_line != "" {
@@ -45,13 +56,14 @@ impl MultiLineString {
 
         let mut index = 0;
 
+        let yap: Vec<_> = yap.collect();
         while length >= availible_width {
-          lines.push(yap[index..index + availible_width].to_string());
+          lines.push(string_from_chars(&yap[index..index + availible_width]));
           length -= availible_width;
           index += availible_width;
         }
 
-        new_line = String::from(yap[index..].to_string());
+        new_line = string_from_chars(&yap[index..]);
         coldex = new_line.len();
 
         if new_line.len() > 0 {

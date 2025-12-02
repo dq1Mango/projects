@@ -425,16 +425,11 @@ impl Message {
     if let Metadata::NotMyMessage(x) = &self.metadata {
       let name = match &contacts[&x.sender].name {
         Some(name) => {
-          // let name = if Some(profile_name) = name.family_name {
-          //   profile_name
-          // } else {
-          //   name.given_name
-          // };
-          // name
-          match &name.family_name {
-            Some(family_name) => family_name.clone(),
-            None => name.given_name.clone(),
-          }
+          name.given_name.clone()
+          // match &name.family_name {
+          //   Some(family_name) => family_name.clone(),
+          //   None => name.given_name.clone(),
+          // }
         }
         None => "smthns borken".to_string(),
       };
@@ -671,24 +666,20 @@ impl Chat {
     }
   }
 
-  fn update(&mut self, message: DataMessage, sender: Uuid, timestamp: u64) {
+  fn update(&mut self, message: DataMessage, sender: Uuid, timestamp: u64, mine: bool) {
     // let new_timestamp = message.timestamp();
 
     let mut i = self.messages.len();
 
-    // dont underflow the usize lol
-    if i > 0 {
-      i -= 1;
-    }
-
     while i > 0 {
-      let ts = match &self.messages[i].metadata {
+      // Logger::log(format!("old timestamp: {} -- new timestamp: {}", ts, timestamp));
+
+      let ts = match &self.messages[i - 1].metadata {
         Metadata::MyMessage(data) => data.sent.timestamp_millis() as u64,
         Metadata::NotMyMessage(data) => data.sent.timestamp_millis() as u64,
       };
 
-      if timestamp < ts {
-        i += 1;
+      if timestamp > ts {
         break;
       }
 
@@ -698,20 +689,31 @@ impl Chat {
     fn get_message_body(message: &DataMessage) -> String {
       match message {
         DataMessage { body: Some(body), .. } => body.to_string().clone(),
-        _ => "Empty data message".to_string().clone(),
+        _ => "Attachment that we cant display yet".to_string().clone(),
       }
     }
 
-    let parsed_message = Message {
-      body: MultiLineString::new(&get_message_body(&message)),
-      metadata: Metadata::new_not_mine(
+    let metadata = if mine {
+      Metadata::new_mine(DateTime::from_timestamp_millis(timestamp as i64).expect("kaboom"))
+    } else {
+      Metadata::new_not_mine(
         DateTime::from_timestamp_millis(timestamp as i64).expect("kaboom"),
         sender,
-      ),
+      )
     };
 
-    // goto considered harmful lmao
+    let parsed_message = Message {
+      body: MultiLineString::new(&get_message_body(&message)),
+      metadata: metadata,
+    };
+
     self.messages.insert(i, parsed_message);
+
+    if self.messages.len() - 1 == self.location.index + 1 {
+      // Oh noooooo, i have violated the ELM design patterns ....
+      // however we will go on with our days ... ?
+      self.location.index += 1;
+    }
   }
 }
 
@@ -798,7 +800,7 @@ impl MyMessage {
 }
 
 fn render_group(chat: &mut Chat, active: bool, hovered: bool, area: Rect, buf: &mut Buffer) {
-  Logger::log(format!("{}", active));
+  // Logger::log(format!("{}", active));
   // let icon = &mut chat.participants.icon;
   //
   // Block::bordered().border_set(border::THICK).render(area, buf);
@@ -1097,28 +1099,6 @@ async fn real_main() -> color_eyre::Result<()> {
     .await
     .expect("why even try anymore?");
 
-  // action_tx.send(Action::Receive(Received::Contacts));
-  update_contacts(&mut model, &mut manager).await;
-
-  let spawner = SignalSpawner::new(action_tx.clone());
-
-  for chat in &model.chats {
-    if (chat.participants.name == "group1".to_string()) {
-      continue;
-    }
-
-    spawner.spawn(Cmd::ListMessages {
-      recipient_uuid: Some(chat.participants.members[0]),
-      group_master_key: None,
-      from: Some(
-        Utc::now()
-          .checked_sub_signed(TimeDelta::try_hours(4).unwrap())
-          .unwrap()
-          .timestamp_millis() as u64,
-      ),
-    });
-  }
-
   let listener = SignalSpawner::new(action_tx.clone());
 
   // receive all past messages
@@ -1173,7 +1153,28 @@ async fn real_main() -> color_eyre::Result<()> {
     }
   }
 
+  // action_tx.send(Action::Receive(Received::Contacts));
+  update_contacts(&mut model, &mut manager).await;
+
   let spawner = SignalSpawner::new(action_tx.clone());
+
+  // load some initial messages just in case
+  for chat in &model.chats {
+    if (chat.participants.name == "group1".to_string()) {
+      continue;
+    }
+
+    spawner.spawn(Cmd::ListMessages {
+      recipient_uuid: Some(chat.participants.members[0]),
+      group_master_key: None,
+      from: Some(
+        Utc::now()
+          .checked_sub_signed(TimeDelta::try_hours(4).unwrap())
+          .unwrap()
+          .timestamp_millis() as u64,
+      ),
+    });
+  }
 
   while model.running_state != RunningState::OhShit {
     // Render the current view
