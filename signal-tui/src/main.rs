@@ -1097,7 +1097,27 @@ async fn real_main() -> color_eyre::Result<()> {
     .await
     .expect("why even try anymore?");
 
-  action_tx.send(Action::Receive(Received::Contacts));
+  // action_tx.send(Action::Receive(Received::Contacts));
+  update_contacts(&mut model, &mut manager).await;
+
+  let spawner = SignalSpawner::new(action_tx.clone());
+
+  for chat in &model.chats {
+    if (chat.participants.name == "group1".to_string()) {
+      continue;
+    }
+
+    spawner.spawn(Cmd::ListMessages {
+      recipient_uuid: Some(chat.participants.members[0]),
+      group_master_key: None,
+      from: Some(
+        Utc::now()
+          .checked_sub_signed(TimeDelta::try_hours(4).unwrap())
+          .unwrap()
+          .timestamp_millis() as u64,
+      ),
+    });
+  }
 
   let listener = SignalSpawner::new(action_tx.clone());
 

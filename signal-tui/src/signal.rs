@@ -674,6 +674,28 @@ pub async fn retrieve_profile<S: Store>(
   Ok(profile)
 }
 
+// pub async fn list_messages(
+//   recipient_uuid: Option<Uuid>,
+//   group_master_key: Option<GroupMasterKeyBytes>,
+//   from: Option<u64>,
+//   output: mpsc::UnboundedSender<Action>,
+// ) -> anyhow::result<()> {
+//   let thread = match (group_master_key, recipient_uuid) {
+//     (Some(master_key), _) => Thread::Group(master_key),
+//     (_, Some(uuid)) => Thread::Contact(uuid),
+//     _ => unreachable!(),
+//   };
+//   for msg in manager
+//     .store()
+//     .messages(&thread, from.unwrap_or(0)..)
+//     .await?
+//     .filter_map(Result::ok)
+//   {
+//     // print_message(&manager, false, &msg).await;
+//     // output.send(Action::Receive(Received(Box<msg>)))
+//   }
+// }
+
 use crate::update::Action;
 use crate::update::LinkingAction;
 
@@ -897,7 +919,7 @@ pub async fn run<S: Store>(
         .await?
         .filter_map(Result::ok)
       {
-        // print_message(&manager, false, &msg).await;
+        output.send(Action::Receive(Received::Content(Box::new(msg))));
       }
     }
     Cmd::Stats => {

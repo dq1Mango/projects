@@ -105,14 +105,14 @@ pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Actio
       KeyCode::Char('j') => Some(Action::ScrollGroup(1)),
       KeyCode::Char('k') => Some(Action::ScrollGroup(-1)),
 
-      KeyCode::Char('l') => Some(Action::SetMode(Mode::Groups)),
+      KeyCode::Char('l') => Some(Action::SetMode(Mode::Normal)),
 
       KeyCode::Char('q') => Some(Action::Quit),
       _ => None,
     },
 
     Mode::Settings => match key.code {
-      KeyCode::Char('l') => Some(Action::SetFocus(Focus::Chats)),
+      KeyCode::Char('l') => Some(Action::SetMode(Mode::Normal)),
 
       KeyCode::Char('q') => Some(Action::Quit),
       _ => None,
@@ -130,7 +130,7 @@ pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Mana
     Action::Scroll(lines) => model.current_chat().location.requested_scroll = lines,
 
     Action::ScrollGroup(direction) => {
-      model.chat_index = (model.chat_index as isize + direction).clamp(0, model.chats.len() as isize) as usize
+      model.chat_index = (model.chat_index as isize + direction).clamp(0, model.chats.len() as isize - 1) as usize
     }
 
     Action::SetMode(new_mode) => {
@@ -198,7 +198,7 @@ pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, t
   }
 }
 
-async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, Registered>) -> anyhow::Result<()> {
+pub async fn update_contacts<S: Store>(model: &mut Model, manager: &mut Manager<S, Registered>) -> anyhow::Result<()> {
   Logger::log("i gyatt called".to_string());
   for contact in get_contacts(manager).await? {
     if model.contacts.contains_key(&contact.uuid) {
