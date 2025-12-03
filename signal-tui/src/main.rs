@@ -346,8 +346,12 @@ impl Model {
 }
 
 impl TextInput {
-  fn render(&mut self, area: Rect, buf: &mut Buffer) {
-    let block = Block::bordered().border_set(border::THICK);
+  fn render(&mut self, active: bool, area: Rect, buf: &mut Buffer) {
+    let color = if active { Color::Magenta } else { Color::Reset };
+
+    let block = Block::bordered()
+      .border_set(border::THICK)
+      .border_style(Style::default().fg(color));
 
     // minus 3 b/c you cant have the cursor on the border and i cant be bothered to add another
     // edge case
@@ -419,8 +423,12 @@ impl Metadata {
 }
 
 impl Message {
-  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, contacts: &Contacts) {
-    let mut block = Block::bordered().border_set(border::THICK);
+  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, contacts: &Contacts, active: bool) {
+    let color = if active { Color::Magenta } else { Color::Reset };
+
+    let mut block = Block::bordered()
+      .border_set(border::THICK)
+      .border_style(Style::default().fg(color));
 
     if let Metadata::NotMyMessage(x) = &self.metadata {
       let name = match &contacts[&x.sender].name {
@@ -548,14 +556,14 @@ impl Chat {
     }
   }
 
-  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, contacts: Contacts) {
+  fn render(&mut self, area: Rect, buf: &mut Buffer, settings: &Settings, contacts: Contacts, mode: Mode) {
     let input_lines = self.text_input.body.rows(area.width - 3);
     // Logger::log("this is our input: ".to_string());
     // Logger::log(format_vec(self.text_input.body.as_lines(area.width - 2)));
 
     let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(input_lines + 2)]).split(area);
 
-    self.text_input.render(layout[1], buf);
+    self.text_input.render(mode == Mode::Insert, layout[1], buf);
 
     // kind of a sketchy shadow here but the layout[1] is used like once
     let area = layout[0];
@@ -647,7 +655,13 @@ impl Chat {
       // let height = min(y + requested_height, area.height);
       let new_area = Rect::new(area.x, area.y + y as u16, area.width, height as u16);
 
-      message.render(new_area, buf, settings, &contacts);
+      message.render(
+        new_area,
+        buf,
+        settings,
+        &contacts,
+        self.location.index == index && mode == Mode::Normal,
+      );
 
       if index == 0 {
         break;
@@ -1208,6 +1222,119 @@ async fn main() {
 
 // TODO: gotta figure out how to model chat state
 
+// an expirmental way to make the borrow checker less mad at me constantly (currently not a fan of
+// it though)
+// fn render_chat(model: &mut Model, contact: &Contacts, settings: &Settings, mode: &Mode, area: Area, buf: &mut Buffer) {
+//   let chat = model.current_chat();
+//
+//   let input_lines = chat.text_input.body.rows(area.width - 3);
+//   // Logger::log("this is our input: ".to_string());
+//   // Logger::log(format_vec(chat.text_input.body.as_lines(area.width - 2)));
+//
+//   let layout = Layout::vertical([Constraint::Min(6), Constraint::Length(input_lines + 2)]).split(area);
+//
+//   chat.text_input.render(layout[1], buf);
+//
+//   // kind of a sketchy shadow here but the layout[1] is used like once
+//   let area = layout[0];
+//
+//   let block = Block::bordered().border_set(border::THICK);
+//   // .title(title.centered())
+//   // .title_bottom(instructions.centered())
+//   block.render(area, buf);
+//
+//   if chat.messages.len() == 0 {
+//     return;
+//   }
+//
+//   // shitty temp padding for the border
+//   let mut area = area;
+//   area.x += 1;
+//   area.width -= 2;
+//   area.height -= 2;
+//   area.y += 1;
+//   // end shitty tmp padding
+//
+//   let message_width: u16 = (area.width as f32 * settings.message_width_ratio + 0.5) as u16 - 2;
+//
+//   let mut scroll = chat.location.requested_scroll;
+//   let mut index = chat.location.index;
+//   let mut offset = chat.location.offset;
+//
+//   // yeah this scrolling logic is a little ugly but im not sure how to make it less so
+//   // also im a little scared to touch it
+//   if scroll > 0 {
+//     while scroll > 0 {
+//       if index + 1 == chat.messages.len() {
+//         offset = 0;
+//         break;
+//       }
+//
+//       let height = chat.messages[index + 1].height(message_width);
+//
+//       if height as i16 > scroll + offset {
+//         offset += scroll;
+//         break;
+//       }
+//       index += 1;
+//       scroll -= height as i16;
+//
+//       if scroll < 0 {
+//         offset += scroll;
+//         scroll = 0;
+//       }
+//     }
+//   } else if scroll < 0 {
+//     while scroll < 0 {
+//       if offset as i16 >= scroll * -1 {
+//         offset += scroll;
+//         break;
+//       }
+//       if index == 0 {
+//         offset = 0;
+//         break;
+//       }
+//
+//       let height = chat.messages[index].height(message_width);
+//       scroll += height as i16;
+//       index -= 1;
+//
+//       if scroll > 0 {
+//         offset = scroll;
+//         scroll = 0;
+//       }
+//     }
+//   }
+//
+//   chat.location.index = index;
+//   chat.location.offset = offset;
+//   chat.location.requested_scroll = 0;
+//
+//   let mut y = area.height as i16 - chat.location.offset;
+//
+//   loop {
+//     let message = &mut self.messages[index];
+//
+//     let height = message.body.rows(message_width) + 2;
+//
+//     y -= height as i16;
+//     if y < 0 {
+//       break;
+//     }
+//
+//     // let height = min(y + requested_height, area.height);
+//     let new_area = Rect::new(area.x, area.y + y as u16, area.width, height as u16);
+//
+//     message.render(new_area, buf, settings, &contacts, self.location.index == index);
+//
+//     if index == 0 {
+//       break;
+//     }
+//
+//     index -= 1;
+//   }
+// }
+
 fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
   let title = Line::from(" Counter App Tutorial ".bold());
   let instructions = Line::from(vec![
@@ -1265,12 +1392,21 @@ fn view(model: &mut Model, frame: &mut Frame, settings: &Settings) {
 
   // wow im good at coding
   let contacts = Arc::clone(&model.contacts);
+  let mode = model.pinned_mode.clone();
 
   match model.pinned_mode {
     Mode::Insert | Mode::Normal | Mode::Groups => {
+      // render_chat(
+      //   model,
+      //   contacts,
+      //   settings,
+      //   model.pinned_mode,
+      //   layout[1],
+      //   frame.buffer_mut(),
+      // );
       model
         .current_chat()
-        .render(layout[1], frame.buffer_mut(), settings, contacts);
+        .render(layout[1], frame.buffer_mut(), settings, contacts, mode);
 
       frame.set_cursor_position(model.current_chat().text_input.cursor_position);
     }
