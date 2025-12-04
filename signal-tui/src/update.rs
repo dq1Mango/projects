@@ -189,6 +189,11 @@ pub async fn update<S: Store>(
 pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, timestamp: u64, mine: bool) {
   match thread {
     Thread::Contact(uuid) => {
+      // Logger::log(format!(
+      //   "thread: {}, with body: {}",
+      //   uuid,
+      //   message.body.clone().unwrap_or("useless message".to_string())
+      // ));
       for chat in &mut model.chats {
         // maybe this rust thing isnt so bad (jk lol)
         if chat.participants.members == [uuid] {
@@ -204,14 +209,26 @@ pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, t
 }
 
 fn handle_message(model: &mut Model, content: Content) -> Option<Action> {
+  Logger::log(format!("{:#?}", content.clone()));
+
   let ts = content.timestamp();
-  let Ok(thread) = Thread::try_from(&content) else {
+  let Ok(mut thread) = Thread::try_from(&content) else {
     Logger::log("failed to derive thread from content".to_string());
     return None;
   };
 
   match content.body {
-    ContentBody::DataMessage(data) => insert_message(model, data, thread, ts, false),
+    ContentBody::DataMessage(data) => {
+      // some flex-tape on the thread derivation
+      let mut mine = false;
+      if let Thread::Contact(uuid) = thread {
+        if uuid == model.account.uuid {
+          thread = Thread::Contact(content.metadata.destination.raw_uuid());
+          mine = true;
+        }
+      }
+      insert_message(model, data, thread, ts, mine)
+    }
     ContentBody::SynchronizeMessage(data) => {
       if let Some(sent) = data.sent {
         if let Some(message) = sent.message {

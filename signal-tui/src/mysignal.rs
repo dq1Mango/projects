@@ -65,7 +65,7 @@ impl SignalSpawner {
       let mut manager = Manager::load_registered(config_store).await.expect("cant be fucked");
 
       while let Some(new_task) = recv.recv().await {
-        Logger::log(format!("we gyatt a message but before"));
+        // Logger::log(format!("we gyatt a message but before"));
         let cloned_output = output.clone();
 
         _ = run(&mut manager, new_task, cloned_output).await;
@@ -103,3 +103,94 @@ impl SignalSpawner {
     self.send.send(task).expect("Thread with LocalSet has shut down.");
   }
 }
+
+// fn try_from(content: &Content) -> Result<Thread, UuidError> {
+//   match &content.body {
+//
+//     // [1-1] Message sent by us with another device
+//     ContentBody::SynchronizeMessage(SyncMessage {
+//       sent:
+//         Some(Sent {
+//                   destination_service_id: Some(uuid),
+//                   ..
+//               }),
+//           ..
+//       }) => Ok(Self::Contact(Uuid::parse_str(uuid)?)),
+//
+//       // [Group] message from somebody else
+//       ContentBody::DataMessage(DataMessage {
+//           group_v2:
+//               Some(GroupContextV2 {
+//                   master_key: Some(key),
+//                   ..
+//               }),
+//           ..
+//     })
+//
+//       // [Group] message sent by us with another device
+//       | ContentBody::SynchronizeMessage(SyncMessage {
+//           sent:
+//               Some(Sent {
+//                   message:
+//                       Some(DataMessage {
+//                           group_v2:
+//                               Some(GroupContextV2 {
+//                                   master_key: Some(key),
+//                                   ..
+//                               }),
+//                           ..
+//                       }),
+//                   ..
+//               }),
+//           ..
+//       })
+//       // [Group] message edit sent by us with another device
+//       | ContentBody::SynchronizeMessage(SyncMessage {
+//           sent:
+//               Some(Sent {
+//                   edit_message:
+//                       Some(EditMessage {
+//                           data_message:
+//                               Some(DataMessage {
+//                                   group_v2:
+//                                       Some(GroupContextV2 {
+//                                           master_key: Some(key),
+//                                           ..
+//                                       }),
+//                                   ..
+//                               }),
+//                           ..
+//                       }),
+//                   ..
+//               }),
+//           ..
+//       })
+//       // [Group] Message edit sent by somebody else
+//       | ContentBody::EditMessage(EditMessage {
+//           data_message:
+//               Some(DataMessage {
+//                   group_v2:
+//                       Some(GroupContextV2 {
+//                           master_key: Some(key),
+//                           ..
+//                       }),
+//                   ..
+//               }),
+//           ..
+//       }) => Ok(Self::Group(
+//           key.clone()
+//               .try_into()
+//               .expect("Group master key to have 32 bytes"),
+//       )),
+//       // [1-1] Any other message directly to us
+//       _ => {
+//         let sender = content.metadata.sender.raw_uuid();
+//         let destination = content.metadata.destination.raw_uuid();
+//
+//         if sender != destination {
+//
+//         }
+//
+//         Ok(Thread::Contact())},
+//         }
+// }
