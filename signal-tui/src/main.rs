@@ -403,6 +403,11 @@ impl TextInput {
     self.cursor_index -= 1;
     self.body.body.remove(self.cursor_index as usize);
   }
+
+  fn clear(&mut self) {
+    self.body.body = "".to_string();
+    self.cursor_index = 0;
+  }
 }
 
 impl Metadata {
@@ -723,6 +728,43 @@ impl Chat {
 
     self.messages.insert(i, parsed_message);
 
+    if self.messages.len() - 1 == self.location.index + 1 {
+      // Oh noooooo, i have violated the ELM design patterns ....
+      // however we will go on with our days ... ?
+      self.location.index += 1;
+    }
+  }
+
+  fn send(&mut self, spawner: &SignalSpawner) {
+    let data = self.text_input.body.body.clone();
+
+    let members = self.participants.members.clone();
+
+    if members.len() == 1 {
+      // dm chat:
+      spawner.spawn(Cmd::Send {
+        uuid: members[0],
+        message: data,
+        attachment_filepath: Vec::new().into(),
+      })
+    } else {
+      // group chat:
+      // not implemented yet
+    }
+
+    // maybe i should implement this by returning an Action enum but i cant be bothered rn
+    //
+    // maybe i should also use the function i already have for adding messages, but thats designed
+    // for DATA messages
+
+    self.messages.push(Message {
+      body: MultiLineString::new(&self.text_input.body.body),
+      metadata: Metadata::new_mine(Utc::now()),
+    });
+
+    self.text_input.clear();
+
+    // scroll down if we r at the bottom (this logic is def repeated and shouldnt be)
     if self.messages.len() - 1 == self.location.index + 1 {
       // Oh noooooo, i have violated the ELM design patterns ....
       // however we will go on with our days ... ?
@@ -1112,6 +1154,7 @@ async fn real_main() -> color_eyre::Result<()> {
     .await
     .expect("why even try anymore?");
 
+  let spawner = SignalSpawner::new(action_tx.clone());
   let listener = SignalSpawner::new(action_tx.clone());
 
   // receive all past messages
@@ -1150,6 +1193,7 @@ async fn real_main() -> color_eyre::Result<()> {
           &mut model,
           msg.expect("the laws of physics have collapsed"),
           &mut manager,
+          &spawner,
         )
         .await;
       }
@@ -1168,8 +1212,6 @@ async fn real_main() -> color_eyre::Result<()> {
 
   // action_tx.send(Action::Receive(Received::Contacts));
   _ = update_contacts(&mut model, &mut manager).await;
-
-  let spawner = SignalSpawner::new(action_tx.clone());
 
   // load some initial messages just in case
   for chat in &model.chats {
@@ -1198,7 +1240,7 @@ async fn real_main() -> color_eyre::Result<()> {
 
     // Process updates as long as they return a non-None message
     while current_msg.is_some() {
-      current_msg = update(&mut model, current_msg.unwrap(), &mut manager).await;
+      current_msg = update(&mut model, current_msg.unwrap(), &mut manager, &spawner).await;
     }
   }
 

@@ -33,6 +33,7 @@ pub enum LinkingAction {
 pub enum Action {
   Type(char),
   Backspace,
+  Send,
 
   Scroll(isize),
   ScrollGroup(isize),
@@ -79,6 +80,7 @@ pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Actio
   match *mode.lock().unwrap() {
     Mode::Insert => match key.code {
       KeyCode::Esc => Some(Action::SetMode(Mode::Normal)),
+      KeyCode::Enter => Some(Action::Send),
       KeyCode::Char(char) => Some(Action::Type(char)),
       // this will not get confusing trust
       KeyCode::Backspace => Some(Action::Backspace),
@@ -119,12 +121,20 @@ pub fn handle_key(key: event::KeyEvent, mode: &Arc<Mutex<Mode>>) -> Option<Actio
   }
 }
 
-pub async fn update<S: Store>(model: &mut Model, msg: Action, manager: &mut Manager<S, Registered>) -> Option<Action> {
+pub async fn update<S: Store>(
+  model: &mut Model,
+  msg: Action,
+  manager: &mut Manager<S, Registered>,
+  spawner: &SignalSpawner,
+) -> Option<Action> {
   match msg {
     Action::Type(char) => {
       model.current_chat().text_input.insert_char(char);
     }
+
     Action::Backspace => model.current_chat().text_input.delete_char(),
+
+    Action::Send => model.current_chat().send(spawner),
 
     Action::Scroll(lines) => {
       model.current_chat().location.index = (model.current_chat().location.index as isize + lines)
