@@ -278,17 +278,18 @@ async fn send<S: Store>(
     .context("failed to initialize messages stream")?;
   pin_mut!(messages);
 
-  println!("synchronizing messages since last time");
+  // println!("synchronizing messages since last time");
 
-  while let Some(content) = messages.next().await {
-    match content {
-      Received::QueueEmpty => break,
-      Received::Contacts => continue,
-      Received::Content(content) => process_incoming_message(manager, attachments_tmp_dir.path(), false, &content).await,
-    }
-  }
+  // --- probably dont need to do this cuz we r constantly receiving messages
+  // while let Some(content) = messages.next().await {
+  //   match content {
+  //     Received::QueueEmpty => break,
+  //     Received::Contacts => continue,
+  //     Received::Content(content) => process_incoming_message(manager, attachments_tmp_dir.path(), false, &content).await,
+  //   }
+  // }
 
-  println!("done synchronizing, sending your message now!");
+  // println!("done synchronizing, sending your message now!");
 
   match recipient {
     Recipient::Contact(uuid) => {
@@ -306,16 +307,16 @@ async fn send<S: Store>(
         .expect("failed to send message");
     }
   }
-
-  tokio::time::timeout(Duration::from_secs(60), async move {
-    while let Some(msg) = messages.next().await {
-      if let Received::Contacts = msg {
-        println!("got contacts sync!");
-        break;
-      }
-    }
-  })
-  .await?;
+  // --- dont want to be sleeping forever lol
+  // tokio::time::timeout(Duration::from_secs(60), async move {
+  //   while let Some(msg) = messages.next().await {
+  //     if let Received::Contacts = msg {
+  //       println!("got contacts sync!");
+  //       break;
+  //     }
+  //   }
+  // })
+  // .await?;
 
   Ok(())
 }
