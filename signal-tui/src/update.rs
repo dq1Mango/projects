@@ -209,7 +209,7 @@ pub fn insert_message(model: &mut Model, message: DataMessage, thread: Thread, t
 }
 
 fn handle_message(model: &mut Model, content: Content) -> Option<Action> {
-  Logger::log(format!("{:#?}", content.clone()));
+  // Logger::log(format!("{:#?}", content.clone()));
 
   let ts = content.timestamp();
   let Ok(mut thread) = Thread::try_from(&content) else {
