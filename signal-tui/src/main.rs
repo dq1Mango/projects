@@ -442,11 +442,17 @@ impl TextInput {
 }
 
 impl Metadata {
-  fn new_mine(timestamp: DateTime<Utc>) -> Self {
+  fn new_mine(timestamp: DateTime<Utc>, recipients: &Vec<Uuid>) -> Self {
+    let mut the_list = Vec::<(Uuid, Option<DateTime<Utc>>)>::with_capacity(recipients.len());
+
+    for uuid in recipients {
+      the_list.push((*uuid, None));
+    }
+
     Self::MyMessage(MyMessage {
       sent: timestamp,
-      delivered_to: Vec::<(Uuid, Option<DateTime<Utc>>)>::new(),
-      read_by: Vec::<(Uuid, Option<DateTime<Utc>>)>::new(),
+      delivered_to: the_list.clone(),
+      read_by: the_list,
     })
   }
 
@@ -733,11 +739,18 @@ impl Chat {
         break;
       }
 
+      if timestamp == ts {
+        return;
+      }
+
       i -= 1;
     }
 
     let metadata = if mine {
-      Metadata::new_mine(DateTime::from_timestamp_millis(timestamp as i64).expect("kaboom"))
+      Metadata::new_mine(
+        DateTime::from_timestamp_millis(timestamp as i64).expect("kaboom"),
+        &self.participants.members,
+      )
     } else {
       Metadata::new_not_mine(
         DateTime::from_timestamp_millis(timestamp as i64).expect("kaboom"),
@@ -790,7 +803,9 @@ impl Chat {
 
     self.messages.push(Message {
       body: MultiLineString::new(&self.text_input.body.body),
-      metadata: Metadata::new_mine(Utc::now()),
+      // this now timestamp is a little sketchy cuz the server is the one who actually says when
+      // what happened
+      metadata: Metadata::new_mine(Utc::now(), &self.participants.members),
     });
 
     self.text_input.clear();
