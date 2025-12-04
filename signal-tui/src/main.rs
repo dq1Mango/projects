@@ -25,6 +25,7 @@ use presage::libsignal_service::{
 };
 
 use presage::manager::Manager;
+use presage::manager::Registered;
 use presage::model::messages::Received;
 use presage::store::{StateStore, Store, Thread};
 use presage_store_sqlite::{OnNewIdentity, SqliteStore};
@@ -39,6 +40,7 @@ use ratatui::{
   widgets::{Block, Gauge, Paragraph, Widget},
 };
 
+use anyhow::{anyhow, bail};
 use chrono::{DateTime, TimeDelta, Utc};
 use tokio::sync::mpsc;
 use url::Url;
@@ -202,6 +204,7 @@ struct Account {
   name: String,
   username: String,
   number: PhoneNumber,
+  uuid: Uuid,
 }
 
 impl Settings {
@@ -218,42 +221,43 @@ use uuid::uuid;
 
 impl Model {
   fn init() -> Self {
-    let _dummy_number = PhoneNumber("14124206767".to_string());
+    let dummy_number = PhoneNumber("14124206767".to_string());
     let dummy_id = uuid!("00000000-0000-0000-0000-000000000000");
 
-    let messages = vec![
-      Message {
-        body: MultiLineString::new(
-          "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
-        ),
-        metadata: Metadata::NotMyMessage(NotMyMessage {
-          sender: dummy_id.clone(),
-          sent: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
-        }),
-      },
-      Message {
-        body: MultiLineString::new("second message"),
-        metadata: Metadata::MyMessage(MyMessage {
-          sent: Utc::now(),
-          read_by: vec![(dummy_id.clone(), Some(Utc::now()))],
-          delivered_to: vec![(dummy_id.clone(), None)],
-        }),
-      },
-      Message {
-        body: MultiLineString::new("a luxurious third message because im not convinced yet"),
-        metadata: Metadata::MyMessage(MyMessage {
-          sent: Utc::now(),
-          read_by: vec![(dummy_id.clone(), None)],
-          delivered_to: vec![(dummy_id.clone(), None)],
-        }),
-      },
-    ];
-
-    let mut chat = Chat::default();
-
-    for message in messages {
-      chat.messages.push(message);
-    }
+    // old code that im scared we still need
+    // let messages = vec![
+    //   Message {
+    //     body: MultiLineString::new(
+    //       "first message lets make this   message super looong jjafkldjaflk it was not long enough last time time to yap fr",
+    //     ),
+    //     metadata: Metadata::NotMyMessage(NotMyMessage {
+    //       sender: dummy_id.clone(),
+    //       sent: Utc::now().checked_sub_signed(TimeDelta::minutes(2)).expect("kaboom"),
+    //     }),
+    //   },
+    //   Message {
+    //     body: MultiLineString::new("second message"),
+    //     metadata: Metadata::MyMessage(MyMessage {
+    //       sent: Utc::now(),
+    //       read_by: vec![(dummy_id.clone(), Some(Utc::now()))],
+    //       delivered_to: vec![(dummy_id.clone(), None)],
+    //     }),
+    //   },
+    //   Message {
+    //     body: MultiLineString::new("a luxurious third message because im not convinced yet"),
+    //     metadata: Metadata::MyMessage(MyMessage {
+    //       sent: Utc::now(),
+    //       read_by: vec![(dummy_id.clone(), None)],
+    //       delivered_to: vec![(dummy_id.clone(), None)],
+    //     }),
+    //   },
+    // ];
+    //
+    // let mut chat = Chat::default();
+    //
+    // for message in messages {
+    //   chat.messages.push(message);
+    // }
 
     // let picker = Picker::from_query_stdio().expect("kaboom");
 
@@ -267,47 +271,48 @@ impl Model {
     // let image = picker.new_resize_protocol(dyn_img.clone());
     // let image2 = picker.new_resize_protocol(dyn_img);
 
-    chat.participants = MyGroup {
-      members: vec![dummy_id.clone()],
-      name: "group 1".to_string(),
-      // icon: Some(MyImageWrapper(image)),
-      _description: "".to_string(),
-    };
-    chat.text_input = TextInput::default();
-    chat.location = Location {
-      index: 1,
-      offset: 0,
-      requested_scroll: 0,
-    };
+    // chat.participants = MyGroup {
+    //   members: vec![dummy_id.clone()],
+    //   name: "group 1".to_string(),
+    //   // icon: Some(MyImageWrapper(image)),
+    //   _description: "".to_string(),
+    // };
+    // chat.text_input = TextInput::default();
+    // chat.location = Location {
+    //   index: 1,
+    //   offset: 0,
+    //   requested_scroll: 0,
+    // };
     // let chats: Vec<Chat> = vec![chat];
 
-    let mut contacts = HashMap::new();
+    let contacts = HashMap::new().into();
 
-    contacts.insert(
-      dummy_id,
-      Profile {
-        name: Some(ProfileName {
-          family_name: Some(String::from("nickname")),
-          given_name: String::from("name"),
-          // pfp: Some(MyImageWrapper(image2)),
-        }),
-        about: None,
-        about_emoji: None,
-        avatar: None,
-        unrestricted_unidentified_access: true,
-      },
-    );
+    // contacts.insert(
+    //   dummy_id,
+    //   Profile {
+    //     name: Some(ProfileName {
+    //       family_name: Some(String::from("nickname")),
+    //       given_name: String::from("name"),
+    //       // pfp: Some(MyImageWrapper(image2)),
+    //     }),
+    //     about: None,
+    //     about_emoji: None,
+    //     avatar: None,
+    //     unrestricted_unidentified_access: true,
+    //   },
+    // );
 
     let account = Account {
-      name: "anonymouse".to_string(),
-      username: "mqngo".to_string(),
-      number: PhoneNumber("67420".to_string()),
+      name: "non existant".to_string(),
+      username: "not found".to_string(),
+      number: dummy_number,
+      uuid: dummy_id,
     };
 
     let model = Model {
       chat_index: 0,
       contacts: Arc::new(contacts),
-      chats: vec![chat],
+      chats: Vec::new().into(),
       account: account,
       running_state: RunningState::Running,
       mode: Arc::new(Mutex::new(Mode::Normal)),
@@ -320,6 +325,32 @@ impl Model {
     // model.chat_index = 0;
     model
   }
+
+  // total hack for getting our own uuid and is not guarenteed to work
+  // async fn find_self<S: Store>(&mut self, manager: &mut Manager<S, Registered>) -> Result<(), ()> {
+  //   fn profiles_equal(profile1: &Profile, profile2: &Profile) -> bool {
+  //     profile1.name == profile2.name && profile1.about == profile2.about
+  //   }
+  //
+  //   let self_profile = match manager.retrieve_profile().await {
+  //     Ok(x) => x,
+  //     Err(_) => return Err(()),
+  //   };
+  //
+  //   for (uuid, profile) in *self.contacts {
+  //     let profile = match manager.retrieve_profile_by_uuid(uuid, profile.profile_key).await {
+  //       Ok(x) => x,
+  //       Err(_) => return Err(()),
+  //     };
+  //
+  //     if profiles_equal(&self_profile, &profile) {
+  //       self.account.uuid = uuid;
+  //       return Ok(());
+  //     }
+  //   }
+  //
+  //   return Err(());
+  // }
 
   // not really needed but it staves off the need for explicit liiftimes a little longer
   fn current_chat(&mut self) -> &mut Chat {
@@ -705,13 +736,6 @@ impl Chat {
       i -= 1;
     }
 
-    fn get_message_body(message: &DataMessage) -> String {
-      match message {
-        DataMessage { body: Some(body), .. } => body.to_string().clone(),
-        _ => "Attachment that we cant display yet".to_string().clone(),
-      }
-    }
-
     let metadata = if mine {
       Metadata::new_mine(DateTime::from_timestamp_millis(timestamp as i64).expect("kaboom"))
     } else {
@@ -721,8 +745,15 @@ impl Chat {
       )
     };
 
+    let body = match &message {
+      DataMessage { body: Some(body), .. } => body,
+      // if there isnt a body its an attachment that we cant display
+      _ => return (),
+      // _ => "Attachment that we cant display yet".to_string().clone(),
+    };
+
     let parsed_message = Message {
-      body: MultiLineString::new(&get_message_body(&message)),
+      body: MultiLineString::new(body),
       metadata: metadata,
     };
 
@@ -1065,7 +1096,8 @@ fn draw_loading_sreen(state: &LoadState, frame: &mut Frame) {
 }
 
 // main ---
-async fn real_main() -> color_eyre::Result<()> {
+async fn real_main() -> anyhow::Result<()> {
+  _ = Logger::init("log.txt");
   // regular lumber jack
   Logger::log("testing".to_string());
 
@@ -1073,15 +1105,13 @@ async fn real_main() -> color_eyre::Result<()> {
   let mut terminal = ratatui::init();
   let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
-  // this should be initialized after we link shhhhhh
-  let mut model = Model::init();
-  let settings = &Settings::init();
+  // let mode = Arc::clone(&model.mode);
+  let mode = Arc::new(Mutex::new(Mode::default()));
 
-  let mode = Arc::clone(&model.mode);
-
+  let cloned_mode = Arc::clone(&mode);
   let action_tx1 = action_tx.clone();
   let updater = tokio::spawn(async move {
-    handle_crossterm_events(action_tx1, &mode).await;
+    handle_crossterm_events(action_tx1, &cloned_mode).await;
   });
 
   // let db_path = default_db_path();
@@ -1150,9 +1180,27 @@ async fn real_main() -> color_eyre::Result<()> {
     config_store = SqliteStore::open_with_passphrase(&db_path, "secret".into(), OnNewIdentity::Trust).await?;
   }
 
+  // initialize all the important stuff
   let mut manager = Manager::load_registered(config_store)
     .await
     .expect("why even try anymore?");
+
+  let mut model = Model::init();
+  model.mode = Arc::clone(&mode);
+  model.account.uuid = manager.registration_data().service_ids.aci;
+
+  let settings = &Settings::init();
+
+  _ = update_contacts(&mut model, &mut manager).await;
+
+  if !model.contacts.contains_key(&model.account.uuid) {
+    bail!("could not find self");
+  }
+
+  // match model.find_self(&mut manager).await {
+  //   Ok(_) => {}
+  //   Err(_) => bail!("could not find self"),
+  // };
 
   let spawner = SignalSpawner::new(action_tx.clone());
   let listener = SignalSpawner::new(action_tx.clone());
@@ -1211,7 +1259,6 @@ async fn real_main() -> color_eyre::Result<()> {
   }
 
   // action_tx.send(Action::Receive(Received::Contacts));
-  _ = update_contacts(&mut model, &mut manager).await;
 
   // load some initial messages just in case
   for chat in &model.chats {
@@ -1224,7 +1271,7 @@ async fn real_main() -> color_eyre::Result<()> {
       group_master_key: None,
       from: Some(
         Utc::now()
-          .checked_sub_signed(TimeDelta::try_hours(4).unwrap())
+          .checked_sub_signed(TimeDelta::try_hours(1).unwrap())
           .unwrap()
           .timestamp_millis() as u64,
       ),
