@@ -112,14 +112,43 @@ func defaultOutputConfig() outputConfig {
 
 }
 
+type EffortConfig struct {
+	Effort string `json:"effort"`
+}
+
+func effortConfig(effort string) EffortConfig {
+	return EffortConfig{
+		Effort: effort,
+	}
+}
+
+type MetaData struct {
+	UserID string `json:"user_id"`
+}
+
+// if you are thinking to yourself:
+// "hmmm, that looks an awful lot like a json object of strings inside a string inside a json object",
+// you would be correct!
+// someone at anthropic was feeling very lazy that day...
+func metatdata() MetaData {
+	return MetaData{
+		UserID: fmt.Sprintf("{\"device_id\":\"%s\",\"account_uuid\":\"%s\",\"session_id\":\"%s\"}",
+			DeviceID, AccountUUID, SESSION_ID),
+	}
+
+}
+
 type AIRequest struct {
 	Model     string `json:"model"`
 	MaxTokens int    `json:"max_tokens"`
 
 	Messages []RoleContent `json:"messages"`
+	System   []Content     `json:"system"`
 
-	Output_config outputConfig `json:"output_config"`
-	Stream        bool         `json:"stream"`
+	Metadata MetaData `json:"metadata"`
+
+	Output_config any  `json:"output_config"`
+	Stream        bool `json:"stream"`
 }
 
 func setReqHeaders(req *http.Request) {
@@ -187,10 +216,19 @@ func main() {
 	body := AIRequest{
 		Model:     "claude-sonnet-4-6",
 		MaxTokens: 1024,
+
 		Messages: []RoleContent{
 			userContent("hello, claude. What are your capabilities")},
-		Output_config: defaultOutputConfig(),
-		Stream:        false,
+		System: []Content{
+			newContent(
+				"x-anthropic-billing-header: cc_version=2.1.92.957; cc_entrypoint=cli; cch=e73d9;",
+			),
+		},
+
+		// Output_config: defaultOutputConfig(),
+		Metadata:      metatdata(),
+		Output_config: effortConfig("medium"),
+		Stream:        true,
 	}
 
 	b, err := json.MarshalIndent(body, "", "  ")
@@ -205,6 +243,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	// jsonBody, err = os.ReadFile("sillybody.json")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	// requestURL := fmt.Sprintf("http://localhost:%d", serverPort)
 	req, err := http.NewRequest(http.MethodPost, MessageURL, bytes.NewBuffer(jsonBody))
