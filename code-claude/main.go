@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
+	// "compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +10,12 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+)
+
+var (
+	// BaseURL = ""
+	MessageURL = "https://api.anthropic.com/v1/messages?beta=true"
+	TokenURL   = "https://platform.claude.com/v1/oauth/token"
 )
 
 type Content struct {
@@ -25,14 +31,31 @@ func newContent(content string) Content {
 }
 
 type RoleContent struct {
-	Role    string  `json:"role"`
-	Content Content `json:"content"`
+	Role    string    `json:"role"`
+	Content []Content `json:"content"`
 }
 
 func userContent(content string) RoleContent {
 	return RoleContent{
 		Role:    "user",
-		Content: newContent(content),
+		Content: []Content{newContent(content)},
+	}
+}
+
+type RefreshRequest struct {
+	GrantType    string `json:"grant_type"`
+	RefreshToken string `json:"refresh_token"`
+	ClientId     string `json:"client_id"`
+	Scope        string `json:"scope"`
+}
+
+func newRefreshRequest(refresh_token string, client_id uuid.UUID) RefreshRequest {
+	return RefreshRequest{
+		GrantType:    "refresh_token",
+		RefreshToken: refresh_token,
+		ClientId:     client_id.String(),
+
+		Scope: "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload",
 	}
 }
 
@@ -42,13 +65,13 @@ type outputConfig struct {
 		Type string `json:"type"`
 
 		Schema struct {
-			Type string `json:"object"`
+			Type string `json:"type"`
 
 			Properties struct {
 				Title struct {
 					Type string `json:"type"`
 				} `json:"title"`
-			} `json:"schema"`
+			} `json:"properties"`
 			Required             []string `json:"required"`
 			AdditionalProperties bool     `json:"additionalProperties"`
 		} `json:"schema"`
@@ -61,22 +84,22 @@ func defaultOutputConfig() outputConfig {
 		Format: struct {
 			Type   string "json:\"type\""
 			Schema struct {
-				Type       string "json:\"object\""
+				Type       string "json:\"type\""
 				Properties struct {
 					Title struct {
 						Type string "json:\"type\""
 					} "json:\"title\""
-				} "json:\"schema\""
+				} "json:\"properties\""
 				Required             []string "json:\"required\""
 				AdditionalProperties bool     "json:\"additionalProperties\""
 			} "json:\"schema\""
 		}{Type: "json_schema", Schema: struct {
-			Type       string "json:\"object\""
+			Type       string "json:\"type\""
 			Properties struct {
 				Title struct {
 					Type string "json:\"type\""
 				} "json:\"title\""
-			} "json:\"schema\""
+			} "json:\"properties\""
 			Required             []string "json:\"required\""
 			AdditionalProperties bool     "json:\"additionalProperties\""
 		}{Type: "object", Properties: struct {
@@ -93,10 +116,10 @@ type AIRequest struct {
 	Model     string `json:"model"`
 	MaxTokens int    `json:"max_tokens"`
 
-	Messages []RoleContent
+	Messages []RoleContent `json:"messages"`
 
 	Output_config outputConfig `json:"output_config"`
-	Stream        string       `json:"stream"`
+	Stream        bool         `json:"stream"`
 }
 
 func setReqHeaders(req *http.Request) {
@@ -106,11 +129,10 @@ func setReqHeaders(req *http.Request) {
 	req.Header.Set("X-Claude-Code-Session-Id", SESSION_ID)
 
 	uuid, _ := uuid.NewRandom()
-	fmt.Println(uuid)
 	req.Header.Set("x-client-request-id", uuid.String())
 
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	// req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 	req.Header.Set(
 		"anthropic-beta",
 		"claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24",
@@ -132,31 +154,33 @@ func setReqHeaders(req *http.Request) {
 	req.Header.Set("X-Stainless-Timeout", "600")
 }
 
-func testDecode() {
-	var decodedBody []byte
-	switch enc := "gzip"; enc {
-	case "gzip":
-		reader, _ := gzip.NewReader(bytes.NewReader(resBody))
-		defer reader.Close()
-		n, err := reader.Read(decodedBody)
-
-		fmt.Println(n)
-		if err != nil {
-			panic(err)
-		}
-
-	case "":
-		decodedBody = resBody
-
-	default:
-		panic(fmt.Sprintf("unknown encoding type: %s", enc))
-	}
-
-	// resBody := res.Body
-
-	fmt.Printf("client: response body: %s\n", decodedBody)
-
-}
+// func testDecode() {
+// 	resBody :=
+//
+// 	var decodedBody []byte
+// 	switch enc := "gzip"; enc {
+// 	case "gzip":
+// 		reader, _ := gzip.NewReader(bytes.NewReader(resBody))
+// 		defer reader.Close()
+// 		n, err := reader.Read(decodedBody)
+//
+// 		fmt.Println(n)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+//
+// 	case "":
+// 		decodedBody = resBody
+//
+// 	default:
+// 		panic(fmt.Sprintf("unknown encoding type: %s", enc))
+// 	}
+//
+// 	// resBody := res.Body
+//
+// 	fmt.Printf("client: response body: %s\n", decodedBody)
+//
+// }
 
 func main() {
 
@@ -166,14 +190,24 @@ func main() {
 		Messages: []RoleContent{
 			userContent("hello, claude. What are your capabilities")},
 		Output_config: defaultOutputConfig(),
+		Stream:        false,
 	}
+
+	b, err := json.MarshalIndent(body, "", "  ")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	fmt.Print(string(b))
+	fmt.Println()
+	// return
+
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		panic(err)
 	}
 
 	// requestURL := fmt.Sprintf("http://localhost:%d", serverPort)
-	req, err := http.NewRequest(http.MethodPost, URL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest(http.MethodPost, MessageURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		fmt.Printf("client: could not create request: %s\n", err)
 		os.Exit(1)
@@ -192,30 +226,36 @@ func main() {
 
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		fmt.Printf("client: could not read response body: %s\n", err)
 		os.Exit(1)
 	}
 
-	var decodedBody []byte
-	switch enc := res.Header.Get("Content-Encoding"); enc {
-	case "gzip":
-		reader, _ := gzip.NewReader(bytes.NewReader(resBody))
-		defer reader.Close()
-		n, err := reader.Read(decodedBody)
-
-		fmt.Println(n)
-		if err != nil {
-			panic(err)
-		}
-
-	case "":
-		decodedBody = resBody
-
-	default:
-		panic(fmt.Sprintf("unknown encoding type: %s", enc))
+	if res.Header.Get("Content-Encoding") == "gzip" {
+		fmt.Println("response used gzip")
+	} else {
+		fmt.Println("ru hroh")
 	}
+
+	// var decodedBody []byte
+	// switch enc := res.Header.Get("Content-Encoding"); enc {
+	// case "gzip":
+	// 	reader, _ := gzip.NewReader(bytes.NewReader(resBody))
+	// 	defer reader.Close()
+	// 	n, err := reader.Read(decodedBody)
+	//
+	// 	fmt.Println(n)
+	// 	if err != nil {
+	// 		fmt.Printf("client: could not read response body: %s\n", err)
+	// 		panic(err)
+	// 	}
+	//
+	// case "":
+	// 	decodedBody = resBody
+	//
+	// default:
+	// 	panic(fmt.Sprintf("unknown encoding type: %s", enc))
+	// }
 
 	// resBody := res.Body
 
-	fmt.Printf("client: response body: %s\n", decodedBody)
+	fmt.Printf("client: response body: %s\n", resBody)
 }
