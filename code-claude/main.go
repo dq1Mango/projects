@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"regexp"
+	"strings"
+
 	// "compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -211,6 +214,22 @@ func setReqHeaders(req *http.Request) {
 //
 // }
 
+func unJSONify(jsons []byte) string {
+	var content string
+
+	// re := regexp.MustCompile(`(?m)^data:.*`)
+
+	re := regexp.MustCompile(`"text":"(.*)"}`)
+	for _, match := range re.FindAllStringSubmatch(string(jsons), -1) {
+		content += match[1]
+	}
+
+	content = strings.ReplaceAll(content, "\\n", "\n")
+
+	return content
+
+}
+
 func main() {
 
 	body := AIRequest{
@@ -218,7 +237,8 @@ func main() {
 		MaxTokens: 1024,
 
 		Messages: []RoleContent{
-			userContent("hello, claude. What are your capabilities")},
+			userContent("give a brief summary of the openAI agent communation protocol")},
+
 		System: []Content{
 			newContent(
 				"x-anthropic-billing-header: cc_version=2.1.92.957; cc_entrypoint=cli; cch=e73d9;",
@@ -231,12 +251,12 @@ func main() {
 		Stream:        true,
 	}
 
-	b, err := json.MarshalIndent(body, "", "  ")
-	if err != nil {
-		fmt.Println("error:", err)
-	}
-	fmt.Print(string(b))
-	fmt.Println()
+	// b, err := json.MarshalIndent(body, "", "  ")
+	// if err != nil {
+	// 	fmt.Println("error:", err)
+	// }
+	// fmt.Print(string(b))
+	// fmt.Println()
 	// return
 
 	jsonBody, err := json.Marshal(body)
@@ -258,6 +278,8 @@ func main() {
 
 	setReqHeaders(req)
 
+	fmt.Printf("client: Sending the request...!\n")
+
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Printf("client: error making http request: %s\n", err)
@@ -270,6 +292,11 @@ func main() {
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		os.Exit(1)
+	}
+
+	if res.StatusCode != 200 {
+		fmt.Println("ruh roh")
+		fmt.Println(string(resBody))
 	}
 
 	if res.Header.Get("Content-Encoding") == "gzip" {
@@ -300,5 +327,8 @@ func main() {
 
 	// resBody := res.Body
 
-	fmt.Printf("client: response body: %s\n", resBody)
+	// fmt.Printf("client: response body: %s\n", resBody)
+	fmt.Println("goofy agent say:")
+	fmt.Println(unJSONify(resBody))
+
 }

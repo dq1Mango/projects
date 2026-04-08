@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Message Graph Visualization</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Graph Controls</h2>
+            <div class="control-group">
+                <h3>View Options</h3>
+                <label>
+                    <input type="checkbox" id="showLabels" checked>
+                    Show Node Labels
+                </label>
+                <label>
+                    <input type="checkbox" id="showEdgeWeights">
+                    Show Edge Weights
+                </label>
+            </div>
+
+            <div class="control-group">
+                <h3>Layout</h3>
+                <button id="resetLayout">Reset Layout</button>
+                <button id="centerGraph">Center Graph</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Simulation</h3>
+                <label>
+                    Node Repulsion:
+                    <input type="range" id="repulsionSlider" min="50" max="500" value="200">
+                </label>
+                <label>
+                    Link Distance:
+                    <input type="range" id="linkDistanceSlider" min="20" max="200" value="160">
+                </label>
+            </div>
+
+            <div class="control-group">
+                <h3>Data</h3>
+                <button id="addRandomNode">Add Random Node</button>
+                <button id="addRandomEdge">Add Random Edge</button>
+                <button id="clearGraph">Clear Graph</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Message Flow Animation</h3>
+                <label>
+                    Animation Duration:
+                    <input type="range" id="animationDurationSlider" min="50" max="1000" value="100">
+                </label>
+                <label>
+                    Animation Intensity:
+                    <input type="range" id="animationIntensitySlider" min="1" max="10" value="10">
+                </label>
+                <button id="triggerFlow">Trigger Flow</button>
+                <label>
+                    <input type="checkbox" id="autoFlow">
+                    Auto Flow
+                </label>
+            </div>
+
+            <div class="control-group">
+                <h3>Info</h3>
+                <div id="nodeCount">Nodes: 0</div>
+                <div id="edgeCount">Edges: 0</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <canvas id="graphCanvas"></canvas>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
