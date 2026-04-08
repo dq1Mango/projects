@@ -31,12 +31,16 @@
             <div class="control-group">
                 <h3>Simulation</h3>
                 <label>
-                    Node Repulsion:
-                    <input type="range" id="repulsionSlider" min="50" max="500" value="200">
+                    <span id="repulsionLabel">Node Repulsion: 2000</span>
+                    <input type="range" id="repulsionSlider" min="1000" max="5000" value="2000">
                 </label>
                 <label>
-                    Link Distance:
+                    <span id="linkDistanceLabel">Link Distance: 160px</span>
                     <input type="range" id="linkDistanceSlider" min="20" max="200" value="160">
+                </label>
+                <label>
+                    <span id="springConstantLabel">Spring Constant: 0.1</span>
+                    <input type="range" id="springConstantSlider" min="0.01" max="0.5" step="0.01" value="0.1">
                 </label>
             </div>
 
@@ -50,11 +54,11 @@
             <div class="control-group">
                 <h3>Message Flow Animation</h3>
                 <label>
-                    Animation Duration:
+                    <span id="animationDurationLabel">Animation Duration: 100ms</span>
                     <input type="range" id="animationDurationSlider" min="50" max="1000" value="100">
                 </label>
                 <label>
-                    Animation Intensity:
+                    <span id="animationIntensityLabel">Animation Intensity: 10</span>
                     <input type="range" id="animationIntensitySlider" min="1" max="10" value="10">
                 </label>
                 <button id="triggerFlow">Trigger Flow</button>

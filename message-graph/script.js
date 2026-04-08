@@ -7,22 +7,23 @@ class MessageGraphVisualization {
         this.nodes = [];
         this.edges = [];
 
-        // Simulation parameters
-        this.repulsionForce = 200;
-        this.linkDistance = 80;
+        // Simulation parameters (will be read from DOM)
+        this.repulsionForce = null;
+        this.linkDistance = null;
+        this.springConstant = null;
         this.damping = 0.9;
 
-        // View parameters
-        this.showLabels = true;
-        this.showEdgeWeights = false;
+        // View parameters (will be read from DOM)
+        this.showLabels = null;
+        this.showEdgeWeights = null;
         this.zoom = 1;
         this.offsetX = 0;
         this.offsetY = 0;
 
-        // Message flow animation parameters
-        this.animationDuration = 1500;
-        this.animationIntensity = 80;
-        this.autoFlow = false;
+        // Message flow animation parameters (will be read from DOM)
+        this.animationDuration = null;
+        this.animationIntensity = null;
+        this.autoFlow = null;
         this.messageFlows = [];
         this.lastAutoFlowTime = 0;
 
@@ -37,9 +38,35 @@ class MessageGraphVisualization {
 
     init() {
         this.setupCanvas();
+        this.readInitialValues();
         this.setupEventListeners();
         this.generateSampleData();
         this.startAnimation();
+    }
+
+    readInitialValues() {
+        // Read simulation parameters from sliders
+        this.repulsionForce = parseInt(document.getElementById('repulsionSlider').value);
+        this.linkDistance = parseInt(document.getElementById('linkDistanceSlider').value);
+
+        // Read view parameters from checkboxes
+        this.showLabels = document.getElementById('showLabels').checked;
+        this.showEdgeWeights = document.getElementById('showEdgeWeights').checked;
+
+        // Read animation parameters from sliders and checkboxes
+        this.animationDuration = parseInt(document.getElementById('animationDurationSlider').value);
+        this.animationIntensity = parseInt(document.getElementById('animationIntensitySlider').value);
+        this.autoFlow = document.getElementById('autoFlow').checked;
+
+        // Update labels with initial values
+        this.updateSliderLabels();
+    }
+
+    updateSliderLabels() {
+        document.getElementById('repulsionLabel').textContent = `Node Repulsion: ${this.repulsionForce}`;
+        document.getElementById('linkDistanceLabel').textContent = `Link Distance: ${this.linkDistance}px`;
+        document.getElementById('animationDurationLabel').textContent = `Animation Duration: ${this.animationDuration}ms`;
+        document.getElementById('animationIntensityLabel').textContent = `Animation Intensity: ${this.animationIntensity}`;
     }
 
     setupCanvas() {
@@ -74,10 +101,12 @@ class MessageGraphVisualization {
 
         document.getElementById('repulsionSlider').addEventListener('input', (e) => {
             this.repulsionForce = parseInt(e.target.value);
+            this.updateSliderLabels();
         });
 
         document.getElementById('linkDistanceSlider').addEventListener('input', (e) => {
             this.linkDistance = parseInt(e.target.value);
+            this.updateSliderLabels();
         });
 
         document.getElementById('resetLayout').addEventListener('click', () => {
@@ -103,10 +132,12 @@ class MessageGraphVisualization {
         // Animation controls
         document.getElementById('animationDurationSlider').addEventListener('input', (e) => {
             this.animationDuration = parseInt(e.target.value);
+            this.updateSliderLabels();
         });
 
         document.getElementById('animationIntensitySlider').addEventListener('input', (e) => {
             this.animationIntensity = parseInt(e.target.value);
+            this.updateSliderLabels();
         });
 
         document.getElementById('triggerFlow').addEventListener('click', () => {
