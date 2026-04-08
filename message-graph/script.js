@@ -1,3 +1,20 @@
+function cubicBezier(x1, y1, x2, y2) {
+  const Ay = 1 - 3 * y2 + 3 * y1;
+  const By = 3 * y2 - 6 * y1;
+  const Cy = 3 * y1;
+
+  return function (progress) {
+    return ((Ay * progress + By) * progress + Cy) * progress;
+  };
+}
+
+const easeInOut = cubicBezier(0.65, 0, 0.35, 1);
+const linear = cubicBezier(0, 0, 1, 1);
+const easeOut = cubicBezier(0, 0, 0.58, 1);
+const easeIn = cubicBezier(0.32, 0, 0.67, 0);
+
+const flowLength = 30; // px
+
 class MessageGraphVisualization {
   constructor() {
     this.canvas = document.getElementById("graphCanvas");
@@ -339,7 +356,7 @@ class MessageGraphVisualization {
     const currentTime = Date.now();
 
     // Auto-trigger flows if enabled
-    if (this.autoFlow && currentTime - this.lastAutoFlowTime > 2000) {
+    if (this.autoFlow && currentTime - this.lastAutoFlowTime > 200) {
       this.triggerRandomFlow();
       this.lastAutoFlowTime = currentTime;
     }
@@ -347,8 +364,12 @@ class MessageGraphVisualization {
     // Update existing flows
     this.messageFlows = this.messageFlows.filter((flow) => {
       const elapsed = currentTime - flow.startTime;
-      flow.progress = Math.min(1, elapsed / flow.duration);
-      return flow.progress < 1;
+      if (elapsed > flow.duration) {
+        return false;
+      }
+
+      flow.progress = easeIn(elapsed / flow.duration);
+      return true;
     });
   }
 
@@ -539,34 +560,73 @@ class MessageGraphVisualization {
 
       if (!nodeA || !nodeB) return;
 
+      const dx = nodeB.x - nodeA.x;
+      const dy = nodeB.y - nodeA.y;
+
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // const perpendicular
+
       // Calculate current position along the edge
-      const currentX = nodeA.x + (nodeB.x - nodeA.x) * flow.progress;
-      const currentY = nodeA.y + (nodeB.y - nodeA.y) * flow.progress;
+      const currentX = nodeA.x + dx * flow.progress;
+      const currentY = nodeA.y + dy * flow.progress;
+
+      const startX = currentX - ((dx / distance) * flowLength) / 2;
+      const startY = currentY - ((dy / distance) * flowLength) / 2;
+
+      const endX = currentX + ((dx / distance) * flowLength) / 2;
+      const endY = currentY + ((dy / distance) * flowLength) / 2;
+
+      const triangleBase = 3;
+
+      const vertex1X = endX - ((dy / distance) * triangleBase) / 2;
+      const vertex1Y = endY + ((dx / distance) * triangleBase) / 2;
+      const vertex2X = endX + ((dy / distance) * triangleBase) / 2;
+      const vertex2Y = endY - ((dx / distance) * triangleBase) / 2;
 
       // Calculate intensity-based opacity and size
-      const opacity = this.animationIntensity / 100;
-      const pulseSize = 8 + (this.animationIntensity / 100) * 12;
+      // const opacity = this.animationIntensity / 100;
+      // const pulseSize = 8 + (this.animationIntensity / 100) * 12;
+      // const pulseSize = this.animationIntensity;
 
       // Create gradient effect
-      const gradient = this.ctx.createRadialGradient(currentX, currentY, 0, currentX, currentY, pulseSize);
+      // const gradient = this.ctx.createRadialGradient(currentX, currentY, 0, currentX, currentY, pulseSize);
 
       // Parse color and add opacity
-      const color = flow.color;
-      gradient.addColorStop(0, color.replace("rgb", "rgba").replace(")", `, ${opacity})`));
-      gradient.addColorStop(0.5, color.replace("rgb", "rgba").replace(")", `, ${opacity * 0.6})`));
-      gradient.addColorStop(1, color.replace("rgb", "rgba").replace(")", `, 0)`));
+      // const color = flow.color;
+      const color = "white";
+      // const gradient = this.ctx.createLinearGradient(startX, startY, endX, endY);
+      // gradient.addColorStop(0, "white");
+      // gradient.addColorStop(1, "transparent");
+
+      // gradient.addColorStop(0, color.replace("rgb", "rgba").replace(")", `, ${opacity})`));
+      // gradient.addColorStop(0.5, color.replace("rgb", "rgba").replace(")", `, ${opacity * 0.6})`));
+      // gradient.addColorStop(1, color.replace("rgb", "rgba").replace(")", `, 0)`));
 
       // Draw the animated flow
-      this.ctx.fillStyle = gradient;
-      this.ctx.beginPath();
-      this.ctx.arc(currentX, currentY, pulseSize, 0, 2 * Math.PI);
-      this.ctx.fill();
-
-      // Add a bright center
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeStyle = color;
       this.ctx.fillStyle = color;
       this.ctx.beginPath();
-      this.ctx.arc(currentX, currentY, pulseSize * 0.3, 0, 2 * Math.PI);
+      this.ctx.moveTo(startX, startY);
+      // this.ctx.lineTo(endX, endY);
+      this.ctx.lineTo(vertex1X, vertex1Y);
+      this.ctx.lineTo(vertex2X, vertex2Y);
+      this.ctx.lineTo(startX, startY);
+      this.ctx.stroke();
       this.ctx.fill();
+      //
+      //
+      // this.ctx.fillStyle = gradient;
+      // this.ctx.beginPath();
+      // this.ctx.arc(currentX, currentY, pulseSize, 0, 2 * Math.PI);
+      // this.ctx.fill();
+
+      // Add a bright center
+      // this.ctx.fillStyle = color;
+      // this.ctx.beginPath();
+      // this.ctx.arc(currentX, currentY, pulseSize * 0.3, 0, 2 * Math.PI);
+      // this.ctx.fill();
     });
 
     // Draw nodes
