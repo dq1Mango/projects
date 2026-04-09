@@ -173,9 +173,13 @@ class MessageGraphVisualization {
       this.autoFlow = e.target.checked;
     });
 
-    // Sidebar toggle functionality
-    document.getElementById("toggleSidebar").addEventListener("click", () => {
-      this.toggleSidebar();
+    // Sidebar show/hide functionality
+    document.getElementById("showSidebar").addEventListener("click", () => {
+      this.showSidebar();
+    });
+
+    document.getElementById("closeSidebar").addEventListener("click", () => {
+      this.hideSidebar();
     });
   }
 
@@ -657,9 +661,14 @@ class MessageGraphVisualization {
     });
   }
 
-  toggleSidebar() {
+  showSidebar() {
     const sidebar = document.getElementById("sidebar");
-    sidebar.classList.toggle("active");
+    sidebar.classList.add("active");
+  }
+
+  hideSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    sidebar.classList.remove("active");
   }
 
   startAnimation() {

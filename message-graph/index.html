@@ -8,9 +8,13 @@
 </head>
 <body>
     <div class="container">
-        <button id="toggleSidebar" class="sidebar-toggle">☰</button>
+        <button id="showSidebar" class="fancy-button sidebar-show">☰</button>
         <div class="sidebar" id="sidebar">
-            <h2>Graph Controls</h2>
+            <div class="sidebar-header">
+                <button id="closeSidebar" class="fancy-button sidebar-close">×</button>
+                <h2>Graph Controls</h2>
+            </div>
+            <div class="sidebar-content">
             <div class="control-group">
                 <h3>View Options</h3>
                 <label>
@@ -73,6 +77,7 @@
                 <h3>Info</h3>
                 <div id="nodeCount">Nodes: 0</div>
                 <div id="edgeCount">Edges: 0</div>
+            </div>
             </div>
         </div>
 
