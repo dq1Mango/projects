@@ -172,6 +172,11 @@ class MessageGraphVisualization {
     document.getElementById("autoFlow").addEventListener("change", (e) => {
       this.autoFlow = e.target.checked;
     });
+
+    // Sidebar toggle functionality
+    document.getElementById("toggleSidebar").addEventListener("click", () => {
+      this.toggleSidebar();
+    });
   }
 
   generateSampleData() {
@@ -650,6 +655,11 @@ class MessageGraphVisualization {
         this.ctx.fillText(node.name, node.x, node.y + 5);
       }
     });
+  }
+
+  toggleSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    sidebar.classList.toggle("active");
   }
 
   startAnimation() {
