@@ -181,15 +181,29 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-#graphCanvas {
+.canvas-container {
+  position: relative;
   width: 100%;
   height: 100%;
-  display: block;
-  cursor: grab;
 }
 
-#graphCanvas:active {
+.graph-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  transition: opacity 0.3s ease;
+}
+
+.graph-canvas:active {
   cursor: grabbing;
+}
+
+.graph-canvas.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 #nodeCount,

@@ -36,6 +36,10 @@
             <div class="control-group">
                 <h3>Simulation</h3>
                 <label>
+                    <input type="checkbox" id="useGPUPhysics">
+                    Use GPU Physics (WebGL)
+                </label>
+                <label>
                     <span id="repulsionLabel">Node Repulsion: 2000</span>
                     <input type="range" id="repulsionSlider" min="1000" max="5000" value="2000">
                 </label>
@@ -82,7 +86,10 @@
         </div>
 
         <div class="main-content">
-            <canvas id="graphCanvas"></canvas>
+            <div id="canvasContainer" class="canvas-container">
+                <canvas id="cpu-canvas" class="graph-canvas"></canvas>
+                <canvas id="gpu-canvas" class="graph-canvas"></canvas>
+            </div>
         </div>
     </div>
 
