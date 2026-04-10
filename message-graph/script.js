@@ -2,6 +2,14 @@
 //
 
 const flowLength = 30; // px
+const flowsPerParticlePerSecond = 2;
+
+// webgl textures which hold vertex locations cannot be resized easily,
+// so just allocated a bunch of space and hope we dont need it all
+const MAX_PARTICLE_COUNT = 1024;
+
+// the floats needed for a webgl vertex
+const FLOATS_PER_VERTEX = 4;
 
 // Canvas Manager Class - handles switching between GPU and CPU backends
 class CanvasManager {
@@ -270,8 +278,8 @@ class GPUPhysicsSimulation {
     };
 
     // Initialize buffers object
-    this.buffers = {};
-    this.textures = {};
+    // this.buffers = {};
+    // this.textures = {};
 
     // Initialize with empty buffers - will be resized when nodes are added
     this.resizeBuffers(0, 0);
@@ -286,12 +294,12 @@ class GPUPhysicsSimulation {
     if (nodeCount === 0) return;
 
     // Calculate texture dimensions for node data
-    const nodeTexWidth = Math.ceil(Math.sqrt(nodeCount));
-    const nodeTexHeight = Math.ceil(nodeCount / nodeTexWidth);
+    // const nodeTexWidth = Math.ceil(Math.sqrt(nodeCount));
+    // const nodeTexHeight = Math.ceil(nodeCount / nodeTexWidth);
 
     // Calculate texture dimensions for edge data
-    const edgeTexWidth = Math.max(1, Math.ceil(Math.sqrt(edgeCount)));
-    const edgeTexHeight = Math.max(1, Math.ceil(edgeCount / edgeTexWidth));
+    // const edgeTexWidth = Math.max(1, Math.ceil(Math.sqrt(edgeCount)));
+    // const edgeTexHeight = Math.max(1, Math.ceil(edgeCount / edgeTexWidth));
 
     // Create or update node position buffers (double buffered)
     if (this.buffers.nodePositions) {
@@ -314,9 +322,9 @@ class GPUPhysicsSimulation {
     this.buffers.nodeAttributes = gl.createBuffer();
 
     // Initialize buffers with proper size
-    const positionBufferSize = nodeCount * 4 * 4; // 4 floats per vertex * 4 bytes per float
-    const velocityBufferSize = nodeCount * 4 * 4; // 4 floats per vertex * 4 bytes per float
-    const attributeBufferSize = nodeCount * 4 * 4; // 4 floats per vertex * 4 bytes per float
+    const positionBufferSize = nodeCount * FLOATS_PER_VERTEX * 4; // 4 floats per vertex * 4 bytes per float
+    const velocityBufferSize = nodeCount * FLOATS_PER_VERTEX * 4; // 4 floats per vertex * 4 bytes per float
+    const attributeBufferSize = nodeCount * FLOATS_PER_VERTEX * 4; // 4 floats per vertex * 4 bytes per float
 
     // Allocate position buffers
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.nodePositions[0]);
@@ -696,8 +704,9 @@ class MessageGraphVisualization {
     this.animationDuration = null;
     this.animationIntensity = null;
     this.autoFlow = null;
-    this.messageFlows = [];
     this.lastAutoFlowTime = 0;
+    this.autoFlowDelay = 1000; // in milliseconds
+    this.messageFlows = [];
 
     // Interaction state
     this.isDragging = false;
@@ -920,6 +929,9 @@ class MessageGraphVisualization {
     };
     this.nodes.push(node);
 
+    this.autoFlowDelay = (1 / (this.nodes.length * flowsPerParticlePerSecond)) * 1000;
+    console.log(this.autoFlowDelay);
+
     this.updateStats();
   }
 
@@ -1063,7 +1075,7 @@ class MessageGraphVisualization {
     const currentTime = Date.now();
 
     // Auto-trigger flows if enabled
-    if (this.autoFlow && currentTime - this.lastAutoFlowTime > 20) {
+    if (this.autoFlow && currentTime - this.lastAutoFlowTime > this.autoFlowDelay) {
       this.triggerRandomFlow();
       this.lastAutoFlowTime = currentTime;
     }
@@ -1240,6 +1252,15 @@ class MessageGraphVisualization {
 
         // Keep nodes within canvas bounds
         const rect = this.canvas.getBoundingClientRect();
+
+        // also stop particles if they hit the wall
+        if (node.x < node.radius || node.x > rect.width - node.radius) {
+          node.vx = 0;
+        }
+        if (node.y < node.radius || node.y > rect.height - node.radius) {
+          node.vy = 0;
+        }
+
         node.x = Math.max(node.radius, Math.min(rect.width - node.radius, node.x));
         node.y = Math.max(node.radius, Math.min(rect.height - node.radius, node.y));
       }
