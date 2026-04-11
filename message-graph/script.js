@@ -8,6 +8,8 @@ const flowsPerParticlePerSecond = 2;
 // so just allocated a bunch of space and hope we dont need it all
 const MAX_PARTICLE_COUNT = 1024;
 
+const MAX_EDGE_COUNT = 4 * MAX_PARTICLE_COUNT;
+
 // the floats needed for a webgl vertex
 const FLOATS_PER_VERTEX = 4;
 
@@ -188,10 +190,18 @@ class GPUPhysicsSimulation {
     // Simulation state
     this.nodeCount = 0;
     this.edgeCount = 0;
+
+    this.nodes = [];
+    this.edges = [];
+
     this.initialized = false;
+
+    // Pending async readback from previous frame
+    this.pendingReadback = null; // { sync, nodeCount, stagingIdx }
   }
 
   async init() {
+    console.log("initializing...");
     // Get WebGL2 context
     // this.gl = this.canvas.getContext("webgl2");
     // if (!this.gl) {
@@ -211,6 +221,7 @@ class GPUPhysicsSimulation {
     this.getLocations();
 
     // Initialize buffers and textures
+    console.log("bufetting...");
     this.initBuffers();
 
     this.initialized = true;
@@ -286,6 +297,7 @@ class GPUPhysicsSimulation {
   }
 
   resizeBuffers(nodeCount, edgeCount) {
+    console.log("resizing...");
     const gl = this.gl;
 
     this.nodeCount = nodeCount;
@@ -294,12 +306,12 @@ class GPUPhysicsSimulation {
     if (nodeCount === 0) return;
 
     // Calculate texture dimensions for node data
-    // const nodeTexWidth = Math.ceil(Math.sqrt(nodeCount));
-    // const nodeTexHeight = Math.ceil(nodeCount / nodeTexWidth);
+    const nodeTexWidth = Math.ceil(Math.sqrt(nodeCount));
+    const nodeTexHeight = Math.ceil(nodeCount / nodeTexWidth);
 
     // Calculate texture dimensions for edge data
-    // const edgeTexWidth = Math.max(1, Math.ceil(Math.sqrt(edgeCount)));
-    // const edgeTexHeight = Math.max(1, Math.ceil(edgeCount / edgeTexWidth));
+    const edgeTexWidth = Math.max(1, Math.ceil(Math.sqrt(edgeCount)));
+    const edgeTexHeight = Math.max(1, Math.ceil(edgeCount / edgeTexWidth));
 
     // Create or update node position buffers (double buffered)
     if (this.buffers.nodePositions) {
@@ -360,6 +372,25 @@ class GPUPhysicsSimulation {
       gl.deleteTexture(this.textures.edgeData);
     }
     this.textures.edgeData = this.createDataTexture(edgeTexWidth, edgeTexHeight);
+
+    // Create staging buffers for async readback (STREAM_READ avoids pipeline stalls)
+    if (this.buffers.stagingOutput) {
+      gl.deleteBuffer(this.buffers.stagingOutput[0]);
+      gl.deleteBuffer(this.buffers.stagingOutput[1]);
+    }
+    this.buffers.stagingOutput = [gl.createBuffer(), gl.createBuffer()];
+    const stagingSize = nodeCount * 4 * 4; // 4 floats per node (pos xy + vel xy) * 4 bytes
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.stagingOutput[0]);
+    gl.bufferData(gl.ARRAY_BUFFER, stagingSize, gl.STREAM_READ);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.stagingOutput[1]);
+    gl.bufferData(gl.ARRAY_BUFFER, stagingSize, gl.STREAM_READ);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    // Invalidate any pending readback since buffer layout changed
+    if (this.pendingReadback) {
+      gl.deleteSync(this.pendingReadback.sync);
+      this.pendingReadback = null;
+    }
 
     this.currentBuffer = 0; // For double buffering
   }
@@ -496,6 +527,9 @@ class GPUPhysicsSimulation {
   simulate(nodes, edges, params) {
     if (!this.initialized || nodes.length === 0) return;
 
+    // Apply previous frame's readback before overwriting node data
+    this.applyPendingReadback(nodes);
+
     const gl = this.gl;
     const rect = this.canvas.getBoundingClientRect();
 
@@ -608,35 +642,68 @@ class GPUPhysicsSimulation {
     gl.bindVertexArray(null);
     gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
 
-    // Read back results and update node positions
-    this.readBackResults(nodes);
+    // Copy TF output to STREAM_READ staging buffer (GPU→GPU, no stall)
+    if (this.buffers.stagingOutput) {
+      const stagingIdx = this.currentBuffer;
+      const byteSize = nodes.length * 4 * 4; // 4 floats per node (vec2 pos + vec2 vel)
+      gl.bindBuffer(gl.COPY_READ_BUFFER, currentOutputBuffer);
+      gl.bindBuffer(gl.COPY_WRITE_BUFFER, this.buffers.stagingOutput[stagingIdx]);
+      gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, 0, 0, byteSize);
+      gl.bindBuffer(gl.COPY_READ_BUFFER, null);
+      gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
+
+      // Replace any unread pending readback
+      if (this.pendingReadback) {
+        gl.deleteSync(this.pendingReadback.sync);
+      }
+      this.pendingReadback = {
+        sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0),
+        nodeCount: nodes.length,
+        stagingIdx,
+      };
+    }
 
     // Swap buffers for next frame
     this.currentBuffer = 1 - this.currentBuffer;
   }
 
-  readBackResults(nodes) {
+  // Apply the readback that was staged on a previous frame, if it's ready.
+  // Called at the top of simulate() so results are one frame behind (no stall).
+  applyPendingReadback(nodes) {
+    if (!this.pendingReadback) return;
+
     const gl = this.gl;
-    const resultBuffer = this.buffers.nodePositions[1 - this.currentBuffer];
+    const { sync, nodeCount, stagingIdx } = this.pendingReadback;
 
-    // Read back position data
-    gl.bindBuffer(gl.ARRAY_BUFFER, resultBuffer);
-    const positionData = new Float32Array(nodes.length * 4);
-    gl.getBufferSubData(gl.ARRAY_BUFFER, 0, positionData);
+    // Non-blocking check — 0 timeout returns immediately
+    const status = gl.clientWaitSync(sync, 0, 0);
+    if (status === gl.TIMEOUT_EXPIRED || status === gl.WAIT_FAILED) return;
 
-    // Read back velocity data
-    const velocityBuffer = this.buffers.nodeVelocities[1 - this.currentBuffer];
-    gl.bindBuffer(gl.ARRAY_BUFFER, velocityBuffer);
-    const velocityData = new Float32Array(nodes.length * 4);
-    gl.getBufferSubData(gl.ARRAY_BUFFER, 0, velocityData);
+    gl.deleteSync(sync);
+    this.pendingReadback = null;
 
-    // Update node positions and velocities
-    for (let i = 0; i < nodes.length; i++) {
+    // TF output is interleaved: [px, py, vx, vy] per node (vec2 + vec2)
+    const data = new Float32Array(nodeCount * 4);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.stagingOutput[stagingIdx]);
+    gl.getBufferSubData(gl.ARRAY_BUFFER, 0, data);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    const count = Math.min(nodeCount, nodes.length);
+    for (let i = 0; i < count; i++) {
+      // Don't overwrite fixed (dragged) nodes — their position is owned by the mouse handler
+      if (nodes[i].fixed) continue;
       const base = i * 4;
-      nodes[i].x = positionData[base];
-      nodes[i].y = positionData[base + 1];
-      nodes[i].vx = velocityData[base];
-      nodes[i].vy = velocityData[base + 1];
+      nodes[i].x = data[base];
+      nodes[i].y = data[base + 1];
+      nodes[i].vx = data[base + 2];
+      nodes[i].vy = data[base + 3];
+    }
+  }
+
+  discardPendingReadback() {
+    if (this.pendingReadback) {
+      this.gl.deleteSync(this.pendingReadback.sync);
+      this.pendingReadback = null;
     }
   }
 
@@ -672,6 +739,12 @@ class GPUPhysicsSimulation {
     // Clean up program
     if (this.program) {
       gl.deleteProgram(this.program);
+    }
+
+    // Clean up pending async readback
+    if (this.pendingReadback) {
+      gl.deleteSync(this.pendingReadback.sync);
+      this.pendingReadback = null;
     }
   }
 }
@@ -856,9 +929,11 @@ class MessageGraphVisualization {
     document.getElementById("useGPUPhysics").addEventListener("change", (e) => {
       this.useGPUPhysics = e.target.checked;
 
-      // Log the switch for debugging
       if (this.useGPUPhysics) {
         if (this.gpuPhysics && this.gpuPhysics.initialized) {
+          // Discard any stale readback so the first GPU frame starts from
+          // the current CPU node positions rather than old GPU positions.
+          this.gpuPhysics.discardPendingReadback();
           console.log("Switched to GPU physics simulation");
         } else {
           console.log("GPU physics not available, staying on CPU");
@@ -929,8 +1004,9 @@ class MessageGraphVisualization {
     };
     this.nodes.push(node);
 
+    // this.gpuPhysics.nodes.push(node);
+
     this.autoFlowDelay = (1 / (this.nodes.length * flowsPerParticlePerSecond)) * 1000;
-    console.log(this.autoFlowDelay);
 
     this.updateStats();
   }
@@ -949,6 +1025,10 @@ class MessageGraphVisualization {
       };
       this.edges.push(edge);
       this.edges.push(reverseEdge);
+
+      // this.gpuPhysics.edges.push(edge);
+      // this.gpuPhysics.edges.push(reverseEdge);
+
       this.updateStats();
     }
   }
@@ -1093,7 +1173,7 @@ class MessageGraphVisualization {
   }
 
   onMouseDown(e) {
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasManager.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
@@ -1122,7 +1202,7 @@ class MessageGraphVisualization {
   onMouseMove(e) {
     if (!this.isDragging) return;
 
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasManager.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
