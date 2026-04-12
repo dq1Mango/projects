@@ -1,0 +1,29 @@
+
+<<<<<<< HEAD
+=======
+      // Use GPU physics simulation
+      const params = {
+        repulsionForce: this.repulsionForce,
+        springConstant: this.springConstant,
+        linkDistance: this.linkDistance,
+        damping: this.damping,
+        deltaTime: 1.0,
+        particleMass: this.particleMass,
+      };
+
+      this.gpuPhysics.simulate(this.nodes, this.edges, params);
+>>>>>>> Snippet
+<<<<<<< HEAD
+=======
+      // Use GPU physics simulation
+      const params = {
+        repulsionForce: this.repulsionForce,
+        springConstant: this.springConstant,
+        linkDistance: this.linkDistance,
+        damping: this.damping,
+        deltaTime: 1.0,
+        particleMass: this.particleMass,
+      };
+
+      this.gpuPhysics.simulate(this.nodes, this.edges, params);
+>>>>>>> Snippet

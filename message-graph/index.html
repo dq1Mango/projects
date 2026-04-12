@@ -51,6 +51,11 @@
                     <span id="springConstantLabel">Spring Constant: 0.1</span>
                     <input type="range" id="springConstantSlider" min="0.001" max="0.1" step="0.001" value="0.02">
                 </label>
+                <label>
+                    <span id="massLabel">Particle Mass: 10</span>
+                    <input type="range" id="massSlider" min="1" max="50" value="10">
+                </label>
+                </label>
             </div>
 
             <div class="control-group">
@@ -64,7 +69,7 @@
                 <h3>Message Flow Animation</h3>
                 <label>
                     <span id="animationDurationLabel">Animation Duration: 100ms</span>
-                    <input type="range" id="animationDurationSlider" min="50" max="1000" value="100">
+                    <input type="range" id="animationDurationSlider" min="200" max="2000" value="100">
                 </label>
                 <label>
                     <span id="animationIntensityLabel">Animation Intensity: 10</span>
@@ -75,6 +80,12 @@
                     <input type="checkbox" id="autoFlow">
                     Auto Flow
                 </label>
+            </div>
+
+            <div class="control-group">
+                <h3>Debug</h3>
+                <button id="resetToKnownState">Reset to Known State</button>
+                <button id="startDebugMode">Start Debug Mode (10 ticks)</button>
             </div>
 
             <div class="control-group">

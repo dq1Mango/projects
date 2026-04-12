@@ -409,7 +409,7 @@ class GPUPhysicsSimulation {
     return texture;
   }
 
-  updateData(nodes, edges) {
+  updateData(nodes, edges, particleMass) {
     if (!this.initialized || nodes.length === 0) return;
 
     // Resize buffers if needed
@@ -441,7 +441,7 @@ class GPUPhysicsSimulation {
       velocityData[base + 3] = 0.0;
 
       // Attribute data (mass, radius, fixed, 0)
-      attributeData[base] = 1.0; // mass
+      attributeData[base] = particleMass; // mass
       attributeData[base + 1] = node.radius;
       attributeData[base + 2] = node.fixed ? 1.0 : 0.0;
       attributeData[base + 3] = 0.0;
@@ -460,13 +460,13 @@ class GPUPhysicsSimulation {
     gl.bufferData(gl.ARRAY_BUFFER, attributeData, gl.DYNAMIC_DRAW);
 
     // Update node position texture
-    this.updateNodeTextures(nodes);
+    this.updateNodeTextures(nodes, particleMass);
 
     // Update edge data texture
     this.updateEdgeTexture(edges);
   }
 
-  updateNodeTextures(nodes) {
+  updateNodeTextures(nodes, particleMass = 10.0) {
     const gl = this.gl;
     const nodeTexWidth = Math.ceil(Math.sqrt(nodes.length));
     const nodeTexHeight = Math.ceil(nodes.length / nodeTexWidth);
@@ -484,7 +484,7 @@ class GPUPhysicsSimulation {
       posTexData[base + 2] = 0.0;
       posTexData[base + 3] = 0.0;
 
-      dataTexData[base] = 1.0; // mass
+      dataTexData[base] = particleMass; // mass
       dataTexData[base + 1] = node.radius;
       dataTexData[base + 2] = node.fixed ? 1.0 : 0.0;
       dataTexData[base + 3] = 0.0;
@@ -534,7 +534,7 @@ class GPUPhysicsSimulation {
     const rect = this.canvas.getBoundingClientRect();
 
     // Update data
-    this.updateData(nodes, edges);
+    this.updateData(nodes, edges, params.particleMass);
 
     // Use physics program
     gl.useProgram(this.program);
@@ -764,6 +764,7 @@ class MessageGraphVisualization {
     this.repulsionForce = null;
     this.linkDistance = null;
     this.springConstant = null;
+    this.particleMass = null;
     this.damping = 0.9;
 
     // View parameters (will be read from DOM)
@@ -790,6 +791,12 @@ class MessageGraphVisualization {
     // GPU physics simulation
     this.useGPUPhysics = false;
     this.gpuPhysics = null;
+
+    // Debug state
+    this.debugMode = false;
+    this.debugTick = 0;
+    this.maxDebugTicks = 10;
+    this.debugData = [];
 
     this.init();
   }
@@ -818,6 +825,7 @@ class MessageGraphVisualization {
     this.repulsionForce = parseInt(document.getElementById("repulsionSlider").value);
     this.linkDistance = parseInt(document.getElementById("linkDistanceSlider").value);
     this.springConstant = parseFloat(document.getElementById("springConstantSlider").value);
+    this.particleMass = parseFloat(document.getElementById("massSlider").value);
 
     // Read view parameters from checkboxes
     this.showLabels = document.getElementById("showLabels").checked;
@@ -836,6 +844,8 @@ class MessageGraphVisualization {
     document.getElementById("repulsionLabel").textContent = `Node Repulsion: ${this.repulsionForce}`;
     document.getElementById("linkDistanceLabel").textContent = `Link Distance: ${this.linkDistance}px`;
     document.getElementById("springConstantLabel").textContent = `Spring Constant: ${this.springConstant}N/m`;
+
+    document.getElementById("massLabel").textContent = `Particle Mass: ${this.particleMass}kg`;
 
     document.getElementById("animationDurationLabel").textContent = `Animation Duration: ${this.animationDuration}ms`;
     document.getElementById("animationIntensityLabel").textContent = `Animation Intensity: ${this.animationIntensity}`;
@@ -883,6 +893,11 @@ class MessageGraphVisualization {
 
     document.getElementById("springConstantSlider").addEventListener("input", (e) => {
       this.springConstant = parseFloat(e.target.value);
+      this.updateSliderLabels();
+    });
+
+    document.getElementById("massSlider").addEventListener("input", (e) => {
+      this.particleMass = parseFloat(e.target.value);
       this.updateSliderLabels();
     });
 
@@ -952,6 +967,15 @@ class MessageGraphVisualization {
 
     document.getElementById("closeSidebar").addEventListener("click", () => {
       this.hideSidebar();
+    });
+
+    // Debug controls
+    document.getElementById("resetToKnownState").addEventListener("click", () => {
+      this.resetToKnownState();
+    });
+
+    document.getElementById("startDebugMode").addEventListener("click", () => {
+      this.startDebugMode();
     });
   }
 
@@ -1249,6 +1273,7 @@ class MessageGraphVisualization {
         linkDistance: this.linkDistance,
         damping: this.damping,
         deltaTime: 1.0,
+        particleMass: this.particleMass,
       };
 
       this.gpuPhysics.simulate(this.nodes, this.edges, params);
@@ -1259,6 +1284,10 @@ class MessageGraphVisualization {
   }
 
   applyCPUForces() {
+    // Physics constants to match GPU implementation
+    const deltaTime = 1.0;
+    const nodeMass = this.particleMass; // Use configurable mass
+
     // Reset forces
     this.nodes.forEach((node) => {
       if (!node.fixed) {
@@ -1277,7 +1306,8 @@ class MessageGraphVisualization {
         const dy = nodeB.y - nodeA.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        if (distance > 0) {
+        if (distance > 0.1) {
+          // Match GPU minimum distance threshold
           const force = this.repulsionForce / (distance * distance);
           const fx = (dx / distance) * force;
           const fy = (dy / distance) * force;
@@ -1306,7 +1336,8 @@ class MessageGraphVisualization {
       const targetDistance = this.linkDistance;
       const force = (distance - targetDistance) * this.springConstant;
 
-      if (distance > 0) {
+      if (distance > 0.1) {
+        // Match GPU minimum distance threshold
         const fx = (dx / distance) * force;
         const fy = (dy / distance) * force;
 
@@ -1321,14 +1352,20 @@ class MessageGraphVisualization {
       }
     });
 
-    // Apply forces to velocities and positions
+    // Apply forces using proper physics integration (match GPU)
     this.nodes.forEach((node) => {
       if (!node.fixed) {
-        node.vx = (node.vx + (node.fx || 0)) * this.damping;
-        node.vy = (node.vy + (node.fy || 0)) * this.damping;
+        // Convert force to acceleration (F = ma, so a = F/m)
+        const ax = (node.fx || 0) / nodeMass;
+        const ay = (node.fy || 0) / nodeMass;
 
-        node.x += node.vx;
-        node.y += node.vy;
+        // Update velocity with acceleration and apply damping
+        node.vx = (node.vx + ax * deltaTime) * this.damping;
+        node.vy = (node.vy + ay * deltaTime) * this.damping;
+
+        // Update position with velocity
+        node.x += node.vx * deltaTime;
+        node.y += node.vy * deltaTime;
 
         // Keep nodes within canvas bounds
         const rect = this.canvas.getBoundingClientRect();
@@ -1488,10 +1525,98 @@ class MessageGraphVisualization {
     sidebar.classList.remove("active");
   }
 
+  // Debug methods
+  resetToKnownState() {
+    console.log("Resetting to known state...");
+
+    // Clear existing data
+    this.nodes = [];
+    this.edges = [];
+
+    // Create 4 nodes in known positions with zero velocity
+    const knownNodes = [
+      { name: "Node0", x: 500, y: 300, vx: 0, vy: 0 },
+      { name: "Node1", x: 400, y: 400, vx: 0, vy: 0 },
+      { name: "Node2", x: 600, y: 600, vx: 0, vy: 0 },
+      { name: "Node3", x: 500, y: 500, vx: 0, vy: 0 },
+    ];
+
+    knownNodes.forEach((nodeData) => {
+      const node = {
+        id: this.nodes.length,
+        name: nodeData.name,
+        x: nodeData.x,
+        y: nodeData.y,
+        vx: nodeData.vx,
+        vy: nodeData.vy,
+        radius: 20,
+        color: "#3498db",
+        fixed: false,
+      };
+      this.nodes.push(node);
+    });
+
+    // Add some known edges
+    this.addEdge(0, 1, 10); // Node0 <-> Node1
+    this.addEdge(1, 2, 15); // Node1 <-> Node2
+    this.addEdge(2, 3, 8); // Node2 <-> Node3
+    this.addEdge(1, 3, 8); // Node2 <-> Node3
+
+    this.gpuPhysics.discardPendingReadback();
+
+    // Reset debug state
+    this.debugTick = 0;
+    this.debugData = [];
+
+    console.log("Reset complete. Nodes:", this.nodes.length, "Edges:", this.edges.length);
+    this.updateStats();
+  }
+
+  startDebugMode() {
+    console.log("Starting debug mode...");
+    this.debugMode = true;
+    this.debugTick = 0;
+    this.debugData = [];
+
+    const backend = this.useGPUPhysics ? "GPU" : "CPU";
+    console.log(`=== DEBUG MODE STARTED (${backend} Backend) ===`);
+    console.log("Simulation Parameters:");
+    console.log(`  Repulsion Force: ${this.repulsionForce}`);
+    console.log(`  Spring Constant: ${this.springConstant}`);
+    console.log(`  Link Distance: ${this.linkDistance}`);
+    console.log(`  Damping: ${this.damping}`);
+    console.log("");
+  }
+
+  logParticleStates() {
+    if (!this.debugMode) {
+      return;
+    }
+
+    if (this.debugTick >= this.maxDebugTicks) {
+      console.log("=== DEBUG MODE COMPLETE ===");
+      this.debugMode = false;
+    }
+
+    const backend = this.useGPUPhysics ? "GPU" : "CPU";
+    console.log(`--- Tick ${this.debugTick} (${backend}) ---`);
+
+    this.nodes.forEach((node, index) => {
+      const pos = `(${node.x.toFixed(3)}, ${node.y.toFixed(3)})`;
+      const vel = `(${node.vx.toFixed(6)}, ${node.vy.toFixed(6)})`;
+      const speed = Math.sqrt(node.vx * node.vx + node.vy * node.vy).toFixed(6);
+      console.log(`  ${node.name}: pos=${pos} vel=${vel} speed=${speed}`);
+    });
+
+    console.log("");
+    this.debugTick++;
+  }
+
   startAnimation() {
     const animate = () => {
       this.updateMessageFlows();
       this.applyForces();
+      this.logParticleStates(); // Log after physics update
       this.draw();
       requestAnimationFrame(animate);
     };

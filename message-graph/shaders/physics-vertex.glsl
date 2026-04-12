@@ -105,8 +105,9 @@ void main() {
             
             if (distance > 0.1) {
                 // Hooke's law: F = k * (distance - restLength)
+                // Weight is not applied to force magnitude to match CPU behaviour
                 float targetDistance = u_linkDistance;
-                float force = (distance - targetDistance) * u_springConstant * weight;
+                float force = (distance - targetDistance) * u_springConstant;
                 vec2 direction = normalize(delta);
                 totalForce += direction * force;
             }
@@ -120,23 +121,23 @@ void main() {
     // Update position
     vec2 newPosition = a_position + newVelocity * u_deltaTime;
     
-    // Boundary collision detection
+    // Boundary collision detection — zero velocity on contact, matching CPU behaviour
     float margin = a_radius;
     if (newPosition.x < margin) {
         newPosition.x = margin;
-        newVelocity.x = -newVelocity.x * 0.5; // Bounce with energy loss
+        newVelocity.x = 0.0;
     }
     if (newPosition.x > u_canvasSize.x - margin) {
         newPosition.x = u_canvasSize.x - margin;
-        newVelocity.x = -newVelocity.x * 0.5;
+        newVelocity.x = 0.0;
     }
     if (newPosition.y < margin) {
         newPosition.y = margin;
-        newVelocity.y = -newVelocity.y * 0.5;
+        newVelocity.y = 0.0;
     }
     if (newPosition.y > u_canvasSize.y - margin) {
         newPosition.y = u_canvasSize.y - margin;
-        newVelocity.y = -newVelocity.y * 0.5;
+        newVelocity.y = 0.0;
     }
     
     // Output new state
