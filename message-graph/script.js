@@ -186,6 +186,7 @@ class GPUPhysicsSimulation {
     this.uniforms = {};
     this.attributes = {};
     this.framebuffers = {};
+    this.tf = gl.createTransformFeedback();
 
     // Simulation state
     this.nodeCount = 0;
@@ -283,10 +284,14 @@ class GPUPhysicsSimulation {
     };
 
     // Create transform feedback objects
-    this.transformFeedbacks = {
-      read: gl.createTransformFeedback(),
-      write: gl.createTransformFeedback(),
-    };
+    this.transformFeedbacks = [gl.createBuffer(), gl.createBuffer()];
+
+    const tfSize = MAX_PARTICLE_COUNT * 2 * 4;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.transformFeedbacks[0]);
+    gl.bufferData(gl.ARRAY_BUFFER, tfSize, gl.DYNAMIC_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.transformFeedbacks[1]);
+    gl.bufferData(gl.ARRAY_BUFFER, tfSize, gl.DYNAMIC_DRAW);
 
     // Initialize buffers object
     // this.buffers = {};
@@ -604,24 +609,24 @@ class GPUPhysicsSimulation {
     gl.bindVertexArray(null);
 
     // Set up transform feedback for output
-    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.transformFeedbacks.write);
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.tf);
 
     // Create interleaved buffer for transform feedback output
-    if (!this.buffers.transformFeedbackOutput) {
-      this.buffers.transformFeedbackOutput = [gl.createBuffer(), gl.createBuffer()];
+    // if (!this.buffers.transformFeedbackOutput) {
+    //   this.buffers.transformFeedbackOutput = [gl.createBuffer(), gl.createBuffer()];
+    //
+    //   // Allocate buffers for interleaved output (position + velocity)
+    //   const outputBufferSize = nodes.length * 8 * 4; // 8 floats per vertex (4 for position, 4 for velocity) * 4 bytes per float
 
-      // Allocate buffers for interleaved output (position + velocity)
-      const outputBufferSize = nodes.length * 8 * 4; // 8 floats per vertex (4 for position, 4 for velocity) * 4 bytes per float
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.transformFeedbackOutput[0]);
-      gl.bufferData(gl.ARRAY_BUFFER, outputBufferSize, gl.DYNAMIC_DRAW);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.transformFeedbackOutput[1]);
-      gl.bufferData(gl.ARRAY_BUFFER, outputBufferSize, gl.DYNAMIC_DRAW);
-    }
+    // gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.transformFeedbackOutput[0]);
+    // gl.bufferData(gl.ARRAY_BUFFER, outputBufferSize, gl.DYNAMIC_DRAW);
+    //
+    // gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.transformFeedbackOutput[1]);
+    // gl.bufferData(gl.ARRAY_BUFFER, outputBufferSize, gl.DYNAMIC_DRAW);
+    // }
 
     // Bind the current output buffer for transform feedback
-    const currentOutputBuffer = this.buffers.transformFeedbackOutput[this.currentBuffer];
+    const currentOutputBuffer = this.transformFeedbacks[this.currentBuffer];
     gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, currentOutputBuffer);
 
     // Disable rasterization (we only want transform feedback)
@@ -805,7 +810,6 @@ class MessageGraphVisualization {
     this.setupCanvas();
     this.readInitialValues();
     this.setupEventListeners();
-    this.generateSampleData();
 
     // Initialize GPU physics system
     try {
@@ -816,6 +820,8 @@ class MessageGraphVisualization {
       console.warn("Failed to initialize GPU physics, falling back to CPU:", error);
       this.useGPUPhysics = false;
     }
+
+    this.generateSampleData();
 
     this.startAnimation();
   }
@@ -1032,6 +1038,8 @@ class MessageGraphVisualization {
 
     this.autoFlowDelay = (1 / (this.nodes.length * flowsPerParticlePerSecond)) * 1000;
 
+    this.gpuPhysics.resizeBuffers(this.nodes.length, this.edges.length);
+
     this.updateStats();
   }
 
@@ -1052,6 +1060,7 @@ class MessageGraphVisualization {
 
       // this.gpuPhysics.edges.push(edge);
       // this.gpuPhysics.edges.push(reverseEdge);
+      this.gpuPhysics.resizeBuffers(this.nodes.length, this.edges.length);
 
       this.updateStats();
     }
