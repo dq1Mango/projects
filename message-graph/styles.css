@@ -2,6 +2,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+
+  --voxer-accent: "#f2621c";
 }
 
 body {
@@ -96,9 +98,10 @@ body {
 .sidebar-header {
   position: sticky;
   top: 0;
-  background-color: rgba(44, 62, 80, 0.98);
+  /* background-color: rgba(44, 62, 80, 0.98); */
+  background-color: var(--voxer-accent);
   padding: 20px;
-  border-bottom: 2px solid #3498db;
+  border-bottom: 2px solid #f2621c;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -144,10 +147,58 @@ body {
 .control-group input[type="range"] {
   width: 100%;
   margin-top: 5px;
+  height: 8px;
+}
+/* Slider Track (The line the thumb moves on) */
+
+/* WebKit Track (Chrome, Safari, Edge) */
+.control-group input[type="range"]::-webkit-slider-runnable-track {
+  background: #f2621c;
+  border-radius: 4px;
+  height: 8px;
+}
+
+/* Firefox Track */
+.control-group input[type="range"]::-moz-range-track {
+  background: white;
+  border-radius: 4px;
+  height: 8px;
+}
+
+.control-group input[type="range"]::-moz-range-progress {
+  background: #f2621c; /* left of thumb */
+  height: 8px;
+}
+
+/* WebKit Thumb (Chrome, Safari, Edge) */
+.control-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  border: 2px solid var(--voxer-accent);
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: var(--voxer-accent);
+  cursor: pointer;
+  margin-top: -6px; /* Adjust to center the thumb vertically on the track */
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Firefox Thumb */
+.control-group input[type="range"]::-moz-range-thumb {
+  border: 4px solid black;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  /* background: var(--voxer-accent); */
+  /* background: white; */
+  background-color: #f2621c
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  /* Firefox often handles margin-top better directly on the thumb */
 }
 
 .control-group button {
-  background-color: #3498db;
+  background-color: #f2621c;
   color: white;
   border: none;
   padding: 8px 16px;
@@ -159,11 +210,11 @@ body {
 }
 
 .control-group button:hover {
-  background-color: #2980b9;
+  background-color: #e65100;
 }
 
 .control-group button:active {
-  background-color: #21618c;
+  background-color: #c0392b;
 }
 
 #clearGraph {
@@ -178,8 +229,10 @@ body {
   width: 100%;
   height: 100vh;
   position: relative;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: black;
+  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
 }
+/* background: linear-gradient(135deg, #f2621c 0%, #ff9966 100%); /* Orange Gradient */
 
 .canvas-container {
   position: relative;
