@@ -13,6 +13,28 @@ const MAX_EDGE_COUNT = 4 * MAX_PARTICLE_COUNT;
 // the floats needed for a webgl vertex
 const FLOATS_PER_VERTEX = 4;
 
+const FILL = getComputedStyle(document.documentElement).getPropertyValue("--fill-color").trim();
+const TRACK = getComputedStyle(document.documentElement).getPropertyValue("--track-color").trim();
+
+const dpr = window.devicePixelRatio || 1;
+
+function resizeCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const { width, height } = canvas.getBoundingClientRect();
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+}
+
+function updateSlider(input) {
+  const max = input.max;
+  const min = input.min;
+  const pct = ((input.value - min) / (max - min)) * 100;
+  // display.textContent = input.value + units;
+  input.style.background = `linear-gradient(90deg, ${FILL} ${pct}%, ${TRACK} ${pct}%)`;
+
+  // onUpdate(input.value);
+}
+
 // Canvas Manager Class - handles switching between GPU and CPU backends
 class CanvasManager {
   constructor(containerId) {
@@ -497,11 +519,31 @@ class GPUPhysicsSimulation {
 
     // Update position texture
     gl.bindTexture(gl.TEXTURE_2D, this.textures.nodePositions);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, nodeTexWidth, nodeTexHeight, gl.RGBA, gl.FLOAT, posTexData);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      nodeTexWidth,
+      nodeTexHeight,
+      gl.RGBA,
+      gl.FLOAT,
+      posTexData,
+    );
 
     // Update data texture
     gl.bindTexture(gl.TEXTURE_2D, this.textures.nodeData);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, nodeTexWidth, nodeTexHeight, gl.RGBA, gl.FLOAT, dataTexData);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      nodeTexWidth,
+      nodeTexHeight,
+      gl.RGBA,
+      gl.FLOAT,
+      dataTexData,
+    );
   }
 
   updateEdgeTexture(edges) {
@@ -526,7 +568,17 @@ class GPUPhysicsSimulation {
 
     // Update edge texture
     gl.bindTexture(gl.TEXTURE_2D, this.textures.edgeData);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, edgeTexWidth, edgeTexHeight, gl.RGBA, gl.FLOAT, edgeTexData);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      edgeTexWidth,
+      edgeTexHeight,
+      gl.RGBA,
+      gl.FLOAT,
+      edgeTexData,
+    );
   }
 
   simulate(nodes, edges, params) {
@@ -827,19 +879,49 @@ class MessageGraphVisualization {
   }
 
   readInitialValues() {
+    // const sliders = [
+    //   "repulsion",
+    //   "linkDistance",
+    //   "springConstant",
+    //   "mass",
+    //   "animationDuration",
+    //   "animationIntensity",
+    // ];
+    //
+    // sliders.forEach((name) => {
+    //   const id = name + "Slider";
+    //
+    //   this[id] = document.getElementById(id);
+    //
+    //   this[name] = parseInt(this[id].value);
+    // });
+
+    // this["wowlookatme"] = "wow";
+    // console.log(this.wowlookatme);
     // Read simulation parameters from sliders
-    this.repulsionForce = parseInt(document.getElementById("repulsionSlider").value);
-    this.linkDistance = parseInt(document.getElementById("linkDistanceSlider").value);
-    this.springConstant = parseFloat(document.getElementById("springConstantSlider").value);
-    this.particleMass = parseFloat(document.getElementById("massSlider").value);
+    this.repulsionSlider = document.getElementById("repulsionSlider");
+    this.repulsionForce = parseInt(this.repulsionSlider.value);
+
+    this.linkDistanceSlider = document.getElementById("linkDistanceSlider");
+    this.linkDistance = parseInt(this.linkDistanceSlider.value);
+
+    this.springConstantSlider = document.getElementById("springConstantSlider");
+    this.springConstant = parseFloat(this.springConstantSlider.value);
+
+    this.massSlider = document.getElementById("massSlider");
+    this.particleMass = parseFloat(this.massSlider.value);
 
     // Read view parameters from checkboxes
     this.showLabels = document.getElementById("showLabels").checked;
     this.showEdgeWeights = document.getElementById("showEdgeWeights").checked;
 
     // Read animation parameters from sliders and checkboxes
-    this.animationDuration = parseInt(document.getElementById("animationDurationSlider").value);
-    this.animationIntensity = parseInt(document.getElementById("animationIntensitySlider").value);
+    this.animationDurationSlider = document.getElementById("animationDurationSlider");
+    this.animationDuration = parseInt(this.animationDurationSlider.value);
+
+    this.animationIntensitySlider = document.getElementById("animationIntensitySlider");
+    this.animationIntensity = parseInt(this.animationIntensitySlider.value);
+
     this.autoFlow = document.getElementById("autoFlow").checked;
 
     // Update labels with initial values
@@ -848,13 +930,25 @@ class MessageGraphVisualization {
 
   updateSliderLabels() {
     document.getElementById("repulsionLabel").textContent = `Node Repulsion: ${this.repulsionForce}`;
-    document.getElementById("linkDistanceLabel").textContent = `Link Distance: ${this.linkDistance}px`;
-    document.getElementById("springConstantLabel").textContent = `Spring Constant: ${this.springConstant}N/m`;
+    updateSlider(this.repulsionSlider);
+
+    // input.style.background = `linear-gradient(90deg, ${FILL} ${pct}%, ${TRACK} ${pct}%)`;
+    document.getElementById("linkDistanceLabel").textContent =
+      `Link Distance: ${this.linkDistance}px`;
+    updateSlider(this.linkDistanceSlider);
+    document.getElementById("springConstantLabel").textContent =
+      `Spring Constant: ${this.springConstant}N/m`;
+    updateSlider(this.springConstantSlider);
 
     document.getElementById("massLabel").textContent = `Particle Mass: ${this.particleMass}kg`;
+    updateSlider(this.massSlider);
 
-    document.getElementById("animationDurationLabel").textContent = `Animation Duration: ${this.animationDuration}ms`;
-    document.getElementById("animationIntensityLabel").textContent = `Animation Intensity: ${this.animationIntensity}`;
+    document.getElementById("animationDurationLabel").textContent =
+      `Animation Duration: ${this.animationDuration}ms`;
+    updateSlider(this.animationDurationSlider);
+    document.getElementById("animationIntensityLabel").textContent =
+      `Animation Intensity: ${this.animationIntensity}`;
+    updateSlider(this.animationIntensitySlider);
   }
 
   setupCanvas() {
@@ -1077,12 +1171,32 @@ class MessageGraphVisualization {
   }
 
   getRandomColor() {
-    const colors = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c", "#e67e22", "#34495e"];
+    const colors = [
+      "#e74c3c",
+      "#3498db",
+      "#2ecc71",
+      "#f39c12",
+      "#9b59b6",
+      "#1abc9c",
+      "#e67e22",
+      "#34495e",
+    ];
     return colors[Math.floor(Math.random() * colors.length)];
   }
 
   getRandomName() {
-    const names = ["Alex", "Sam", "Jordan", "Taylor", "Casey", "Morgan", "Riley", "Avery", "Quinn", "Sage"];
+    const names = [
+      "Alex",
+      "Sam",
+      "Jordan",
+      "Taylor",
+      "Casey",
+      "Morgan",
+      "Riley",
+      "Avery",
+      "Quinn",
+      "Sage",
+    ];
     return names[Math.floor(Math.random() * names.length)] + Math.floor(Math.random() * 1000);
   }
 
