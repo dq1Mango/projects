@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"go.bug.st/serial"
 )
@@ -67,12 +66,12 @@ var testImage = [][]byte{
 	{0, 0, 0, 0, 1, 0, 0, 0, 0},
 	{0, 0, 0, 0, 1, 0, 0, 0, 0},
 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 1, 0},
+	{0, 0, 0, 0, 0, 0, 1, 1, 0},
+	{0, 0, 0, 0, 0, 1, 1, 0, 0},
+	{0, 1, 1, 0, 1, 1, 0, 0, 0},
+	{0, 0, 1, 1, 1, 0, 0, 0, 0},
+	{0, 0, 0, 1, 0, 0, 0, 0, 0},
 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -94,8 +93,6 @@ func transpose(m [][]byte) Frame {
 
 	return transposed
 }
-
-var testFrame = transpose(testImage).scaleBrightness(20)
 
 type LEDMatrix struct {
 	Port serial.Port
@@ -130,37 +127,12 @@ func (l *LEDMatrix) writeFrame(frame *Frame) {
 
 }
 
-func send_column(
-	column_id byte,
-	values []float64,
-	serial_port serial.Port,
-	brightness_scale float64,
-) {
-	cmd := []byte{0x32, 0xAC, CMD_STAGE_COL, column_id}
-
-	for _, val := range values {
-		scaled_val := int(val * brightness_scale)
-		val := byte(max(0, min(255, scaled_val)))
-		cmd = append(cmd, val)
-	}
-
-	n, err := serial_port.Write(cmd)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Sent %v bytes\n", n)
-
-	send_flush(serial_port)
-}
-
-func send_flush(serial_port serial.Port) {
-	cmd := []byte{0x32, 0xAC, CMD_FLUSH_COLS}
-	serial_port.Write(cmd)
-}
-
 func (l *LEDMatrix) showTest() {
-	fmt.Println(testFrame)
+
+	var testFrame = transpose(testImage)
+	brightness := 255
+	testFrame.scaleBrightness(byte(brightness))
+
 	l.writeFrame(&testFrame)
 }
 
@@ -180,19 +152,10 @@ func main() {
 		BaudRate: 115200,
 	}
 	port, err := serial.Open(LEFT, mode)
+
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	data := make([]float64, HEIGHT)
-
-	for i := range data {
-		data[i] = 1
-	}
-
-	send_column(1, data, port, 10)
-
-	time.Sleep(time.Second)
 
 	matrix := &LEDMatrix{Port: port}
 
