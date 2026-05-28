@@ -1,15 +1,20 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"log/slog"
+	"os"
+	"strconv"
+	"strings"
 
 	"go.bug.st/serial"
 )
 
 const (
-	LEFT  = "/dev/ttyACM0"
-	RIGHT = "/dev/ttyACM1"
+	LEFT  = "/dev/ttyACM1"
+	RIGHT = "/dev/ttyACM0"
 )
 
 const (
@@ -23,6 +28,8 @@ const (
 )
 
 const BAUD_RATE = 115200
+
+const MIN_BRIGHTNESS = 5
 
 // serial data is written by collumn, so the rows and collumns r kinda backwards
 type Frame [][]byte
@@ -38,43 +45,6 @@ func (f Frame) scaleBrightness(brightness byte) Frame {
 	}
 
 	return f
-}
-
-var testImage = [][]byte{
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 0, 1, 0, 0, 0, 0},
-	{0, 0, 0, 0, 1, 0, 0, 0, 0},
-	{0, 0, 0, 0, 1, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 1, 0, 0, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 1, 0, 0, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 1, 0, 0, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 0, 0, 1, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 1, 1, 1, 0, 0, 0},
-	{0, 0, 0, 0, 1, 0, 0, 0, 0},
-	{0, 0, 0, 0, 1, 0, 0, 0, 0},
-	{0, 0, 0, 0, 1, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 1, 0},
-	{0, 0, 0, 0, 0, 0, 1, 1, 0},
-	{0, 0, 0, 0, 0, 1, 1, 0, 0},
-	{0, 1, 1, 0, 1, 1, 0, 0, 0},
-	{0, 0, 1, 1, 1, 0, 0, 0, 0},
-	{0, 0, 0, 1, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0},
 }
 
 func transpose(m [][]byte) Frame {
@@ -117,23 +87,182 @@ func (l *LEDMatrix) flush() {
 	l.Port.Write(cmd)
 }
 
-func (l *LEDMatrix) writeFrame(frame *Frame) {
+var (
+	SizeError = errors.New("Invalid Frame Size")
+)
 
-	for index, col := range *frame {
+func checkFrame(frame [][]byte) error {
+	if !(len(frame) == HEIGHT && len(frame[0]) == WIDTH) {
+		return SizeError
+	}
+
+	for i, row := range frame {
+		for j, val := range row {
+			if val != 0 && val < 5 {
+				slog.Warn("Brightness value below threshold, raising ...")
+
+				frame[i][j] = 5
+			}
+		}
+	}
+
+	return nil
+
+}
+
+func (l *LEDMatrix) writeFrame(frame *Frame) error {
+
+	if err := checkFrame(*frame); err != nil {
+		return err
+	}
+
+	transposed := transpose(*frame)
+
+	for index, col := range transposed {
 		l.writeColumn(col, index)
 	}
 
 	l.flush()
 
+	return nil
+
 }
 
 func (l *LEDMatrix) showTest() {
 
-	var testFrame = transpose(testImage)
-	brightness := 255
-	testFrame.scaleBrightness(byte(brightness))
+	// var testFrame = transpose(testImage)
+	// brightness := 255
+	// testFrame.scaleBrightness(byte(brightness))
 
-	l.writeFrame(&testFrame)
+	var testImage = Frame{
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 1, 0, 0, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 1, 0, 0, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 1, 0, 0, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 1, 0},
+		{0, 0, 0, 0, 0, 0, 1, 1, 0},
+		{0, 0, 0, 0, 0, 1, 1, 0, 0},
+		{0, 1, 1, 0, 1, 1, 0, 0, 0},
+		{0, 0, 1, 1, 1, 0, 0, 0, 0},
+		{0, 0, 0, 1, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0},
+	}
+
+	testImage.scaleBrightness(5)
+
+	l.writeFrame(&testImage)
+}
+
+func clamp(x, a, b int) int {
+	if x < a {
+		return a
+	} else if x > b {
+		return b
+	} else {
+		return x
+	}
+}
+
+func getBatteryPercentage() int {
+	batPath := "/sys/class/power_supply/BAT1/capacity"
+
+	capStr, err := os.ReadFile(batPath)
+	if err != nil {
+		return 67
+	}
+
+	percentage, err := strconv.Atoi(strings.TrimSpace(string(capStr)))
+
+	if err != nil {
+		panic(err)
+	}
+
+	return percentage
+}
+
+func makeBatteryFrame(percentage int) Frame {
+
+	clamped := clamp(percentage, 0, 100)
+	if percentage != clamped {
+		slog.Warn(fmt.Sprintf("Invalid battery percentage %d", percentage))
+	}
+
+	var baseFrame = Frame{
+		{0, 0, 0, 1, 1, 1, 0, 0, 0},
+		{1, 1, 1, 1, 0, 1, 1, 1, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 1, 1, 1, 1, 1, 1, 1, 1},
+	}
+
+	baseFrame.scaleBrightness(40)
+
+	filledRows := (HEIGHT - 3) * percentage / 100
+	brightness := 10
+
+	row := HEIGHT - 1 - 1
+
+	for range filledRows {
+		for col := 1; col < WIDTH-1; col++ {
+			baseFrame[row][col] = byte(brightness)
+		}
+
+		row--
+	}
+
+	return baseFrame
 }
 
 func main() {
@@ -159,6 +288,9 @@ func main() {
 
 	matrix := &LEDMatrix{Port: port}
 
-	matrix.showTest()
+	batteryFrame := makeBatteryFrame(getBatteryPercentage())
+	matrix.writeFrame(&batteryFrame)
+
+	// matrix.showTest()
 
 }
