@@ -73,13 +73,12 @@ func (l *LEDMatrix) writeColumn(data []byte, column_id int) {
 
 	cmd = append(cmd, data...)
 
-	n, err := l.Port.Write(cmd)
+	_, err := l.Port.Write(cmd)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Sent %v bytes\n", n)
 }
 
 func (l *LEDMatrix) flush() {
@@ -212,7 +211,7 @@ func makeBatteryFrame(percentage int) Frame {
 
 	var baseFrame = Frame{
 		{0, 0, 0, 1, 1, 1, 0, 0, 0},
-		{1, 1, 1, 1, 0, 1, 1, 1, 1},
+		{1, 1, 1, 1, 1, 1, 1, 1, 1},
 		{1, 0, 0, 0, 0, 0, 0, 0, 1},
 		{1, 0, 0, 0, 0, 0, 0, 0, 1},
 		{1, 0, 0, 0, 0, 0, 0, 0, 1},
@@ -247,7 +246,7 @@ func makeBatteryFrame(percentage int) Frame {
 		{1, 1, 1, 1, 1, 1, 1, 1, 1},
 	}
 
-	baseFrame.scaleBrightness(40)
+	baseFrame.scaleBrightness(100)
 
 	filledRows := (HEIGHT - 3) * percentage / 100
 	brightness := 10
@@ -290,6 +289,8 @@ func main() {
 
 	batteryFrame := makeBatteryFrame(getBatteryPercentage())
 	matrix.writeFrame(&batteryFrame)
+
+	daemon()
 
 	// matrix.showTest()
 
