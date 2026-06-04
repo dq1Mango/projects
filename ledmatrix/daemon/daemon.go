@@ -11,7 +11,7 @@ import (
 	"syscall"
 )
 
-func daemon() {
+func listen_on_socket() {
 	socketPath := "/tmp/my.sock"
 	os.Remove(socketPath) // clean up any stale socket file
 
@@ -45,7 +45,7 @@ func daemon() {
 			fmt.Println("accept error:", err)
 			continue
 		}
-		fmt.Println("handling...")
+
 		go handleConn(conn)
 	}
 }
