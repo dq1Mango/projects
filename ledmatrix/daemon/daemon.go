@@ -1,127 +1,117 @@
 package main
 
 import (
-	"bufio"
-	"errors"
-	"fmt"
-	"net"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
+	"time"
 
 	"github.com/dq1Mango/projects/ledmatrix/ipc"
 )
 
-func listen_on_socket() {
-	os.Remove(ipc.SOCK) // clean up any stale socket file
+const RefreshDelay = 10 * time.Second
 
-	listener, err := net.Listen("unix", ipc.SOCK)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "listen:", err)
-		os.Exit(1)
+var ActionChan chan ipc.Action = make(chan ipc.Action)
+
+type State struct {
+	Left, Right *LEDMatrix
+
+	Mode      ipc.Mode
+	Frame     Frame
+	Stop      chan any
+	FrameChan chan *Frame
+}
+
+func NewState(left, right *LEDMatrix) *State {
+	return &State{
+		Mode:      ipc.Nothing,
+		Frame:     *EmptyFrame(),
+		Stop:      make(chan any),
+		FrameChan: make(chan *Frame),
+
+		Left: left, Right: right,
 	}
-	defer listener.Close()
 
-	// clean up socket file on shutdown
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		<-c
-		listener.Close()
-		os.Remove(ipc.SOCK)
-		os.Exit(0)
-	}()
+}
 
-	fmt.Println("Listening on", ipc.SOCK)
+func (s *State) WriteFrame() error {
+	println("writing new frames")
+
+	if err := s.Left.writeFrame(&s.Frame); err != nil {
+		return err
+	}
+	if err := s.Right.writeFrame(&s.Frame); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s State) showBattery() {
+	refreshTimer := time.NewTimer(RefreshDelay)
+
+	percentage := getBatteryPercentage()
+	frame := makeBatteryFrame(percentage)
+	s.FrameChan <- &frame
 
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
+		select {
+		case <-refreshTimer.C:
+			percentage := getBatteryPercentage()
+			frame := makeBatteryFrame(percentage)
+			s.FrameChan <- &frame
 
-			if errors.Is(err, net.ErrClosed) {
-				return
+		case <-s.Stop:
+			return
+		}
+	}
+
+}
+
+func (s *State) SetMode(mode ipc.Mode) {
+	select {
+	case s.Stop <- "":
+	default:
+	}
+
+	switch mode {
+	case ipc.Nothing:
+		println("clearing screen")
+		frame := *EmptyFrame()
+		s.FrameChan <- &frame
+
+	case ipc.Battery:
+		go s.showBattery()
+
+	}
+}
+
+func (s *State) startDaemon() {
+
+	refreshTimer := time.NewTimer(RefreshDelay)
+
+	for {
+		println("waiting for something to do")
+		select {
+
+		case action := <-ActionChan:
+			println("got action which needs to be renamed")
+			switch a := action.(type) {
+			case *ipc.SetMode:
+				go s.SetMode(a.Mode)
+
+			default:
+
 			}
 
-			fmt.Println("accept error:", err)
-			continue
+		case f := <-s.FrameChan:
+			println("new frame")
+			s.Frame = *f
+			s.WriteFrame()
+
+		case <-refreshTimer.C:
+			s.WriteFrame()
 		}
 
-		go handleConn(conn)
+		refreshTimer = time.NewTimer(RefreshDelay)
+
 	}
-}
-
-func handleConn(conn net.Conn) {
-	defer conn.Close()
-
-	addr := conn.RemoteAddr().String()
-	fmt.Printf("[%s] connected\n", addr)
-
-	scanner := bufio.NewScanner(conn)
-	writer := bufio.NewWriter(conn)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		fmt.Printf("[%s] received: %s\n", addr, line)
-
-		action, err := parseCommand(line)
-
-		if err != nil {
-			writer.WriteString(err.Error())
-			writer.WriteString("done\n")
-			writer.Flush()
-			continue
-		}
-
-		writer.WriteString("Performing action...\n")
-		writer.Flush()
-
-		_ = action
-
-		writer.WriteString("done\n")
-		writer.Flush()
-
-		// response := "echo: " + strings.ToUpper(line) + "\n"
-		// writer.WriteString(response)
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("[%s] error: %v\n", addr, err)
-	}
-	fmt.Printf("[%s] disconnected\n", addr)
-}
-
-var BadUsage = errors.New("Unknown command\nSee 'ledmatrix --help' for usage\n")
-
-func parseCommand(command string) (ipc.Action, error) {
-
-	parts := strings.Split(command, " ")
-
-	var action ipc.Action
-	var err error
-
-	switch parts[0] {
-	case "mode":
-		action, err = setMode(parts[1])
-	default:
-		err = BadUsage
-	}
-
-	return action, err
-
-}
-
-var InvalidModeError = errors.New("Invalid mode name")
-
-func setMode(mode string) (ipc.Action, error) {
-	modeNum, ok := ipc.ModeMap[mode]
-
-	if !ok {
-		return nil, InvalidModeError
-	}
-
-	message := &ipc.SetMode{Mode: modeNum}
-
-	return message, nil
 
 }
