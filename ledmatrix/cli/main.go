@@ -1,25 +1,48 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
-	"time"
+	"os"
+
+	"github.com/dq1Mango/projects/ledmatrix/ipc"
 )
 
 func main() {
-	conn, err := net.Dial("unix", "/tmp/my.sock")
+	conn, err := net.Dial("unix", ipc.SOCK)
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
 
-	conn.Write([]byte("hello from client\n"))
+	args := ""
+	for i, arg := range os.Args[1:] {
+		args += arg
 
-	time.Sleep(1 * time.Second)
+		if i < len(os.Args[1:])-1 {
+			args += " "
+		} else {
+			args += "\n"
+		}
+	}
 
-	conn.Write([]byte("also from client\n"))
+	fmt.Println(args)
 
-	buf := make([]byte, 1024)
-	n, _ := conn.Read(buf)
-	fmt.Printf("server said: %s\n", buf[:n])
+	conn.Write([]byte(args))
+
+	scanner := bufio.NewScanner(conn)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		fmt.Println(line)
+
+		if line == "done" {
+			return
+		}
+	}
+
+	fmt.Println("bye!")
+
 }

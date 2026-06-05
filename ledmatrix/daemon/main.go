@@ -290,7 +290,7 @@ func main() {
 	batteryFrame := makeBatteryFrame(getBatteryPercentage())
 	matrix.writeFrame(&batteryFrame)
 
-	daemon()
+	listen_on_socket()
 
 	// matrix.showTest()
 

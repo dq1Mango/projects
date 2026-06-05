@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const SOCK = "/tmp/my.sock"
+
 type Action interface {
 	ToString() string
 	FromString([]string) error
@@ -23,6 +25,12 @@ const (
 	Nothing Mode = iota
 	Battery
 )
+
+// man i really like go but i would love some enums
+var ModeMap = map[string]Mode{
+	"nothing": Nothing,
+	"battery": Battery,
+}
 
 type SetMode struct {
 	Mode Mode
