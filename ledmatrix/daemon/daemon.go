@@ -10,53 +10,53 @@ const RefreshDelay = 10 * time.Second
 
 var ActionChan chan ipc.Action = make(chan ipc.Action)
 
-type State struct {
+type Daemon struct {
 	Left, Right *LEDMatrix
 
-	Mode      ipc.Mode
-	Frame     Frame
-	Stop      chan any
-	FrameChan chan *Frame
+	Mode         ipc.Mode
+	CurrentFrame Frame
+	Stop         chan any
+	Frames       chan *Frame
 }
 
-func NewState(left, right *LEDMatrix) *State {
-	return &State{
-		Mode:      ipc.Nothing,
-		Frame:     *EmptyFrame(),
-		Stop:      make(chan any),
-		FrameChan: make(chan *Frame),
+func NewState(left, right *LEDMatrix) *Daemon {
+	return &Daemon{
+		Mode:         ipc.Nothing,
+		CurrentFrame: *EmptyFrame(),
+		Stop:         make(chan any),
+		Frames:       make(chan *Frame),
 
 		Left: left, Right: right,
 	}
 
 }
 
-func (s *State) WriteFrame() error {
+func (s *Daemon) WriteFrame() error {
 	println("writing new frames")
 
-	if err := s.Left.writeFrame(&s.Frame); err != nil {
+	if err := s.Left.writeFrame(&s.CurrentFrame); err != nil {
 		return err
 	}
-	if err := s.Right.writeFrame(&s.Frame); err != nil {
+	if err := s.Right.writeFrame(&s.CurrentFrame); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s State) showBattery() {
+func (s Daemon) showBattery() {
 	refreshTimer := time.NewTimer(RefreshDelay)
 
 	percentage := getBatteryPercentage()
 	frame := makeBatteryFrame(percentage)
-	s.FrameChan <- &frame
+	s.Frames <- &frame
 
 	for {
 		select {
 		case <-refreshTimer.C:
 			percentage := getBatteryPercentage()
 			frame := makeBatteryFrame(percentage)
-			s.FrameChan <- &frame
+			s.Frames <- &frame
 
 		case <-s.Stop:
 			return
@@ -65,7 +65,7 @@ func (s State) showBattery() {
 
 }
 
-func (s *State) SetMode(mode ipc.Mode) {
+func (s *Daemon) SetMode(mode ipc.Mode) {
 	select {
 	case s.Stop <- "":
 	default:
@@ -75,15 +75,18 @@ func (s *State) SetMode(mode ipc.Mode) {
 	case ipc.Nothing:
 		println("clearing screen")
 		frame := *EmptyFrame()
-		s.FrameChan <- &frame
+		s.Frames <- &frame
 
 	case ipc.Battery:
 		go s.showBattery()
 
+	case ipc.Stars:
+		go s.Stars()
+
 	}
 }
 
-func (s *State) startDaemon() {
+func (s *Daemon) startDaemon() {
 
 	refreshTimer := time.NewTimer(RefreshDelay)
 
@@ -93,6 +96,7 @@ func (s *State) startDaemon() {
 
 		case action := <-ActionChan:
 			println("got action which needs to be renamed")
+
 			switch a := action.(type) {
 			case *ipc.SetMode:
 				go s.SetMode(a.Mode)
@@ -101,9 +105,9 @@ func (s *State) startDaemon() {
 
 			}
 
-		case f := <-s.FrameChan:
+		case f := <-s.Frames:
 			println("new frame")
-			s.Frame = *f
+			s.CurrentFrame = *f
 			s.WriteFrame()
 
 		case <-refreshTimer.C:
