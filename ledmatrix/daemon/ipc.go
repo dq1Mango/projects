@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/dq1Mango/projects/ledmatrix/ipc"
 )
@@ -25,12 +23,10 @@ func listen_on_socket() {
 
 	// clean up socket file on shutdown
 	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		<-c
+		<-TERMINATE
 		listener.Close()
 		os.Remove(ipc.SOCK)
-		os.Exit(0)
+		TERMINATION_COMPLETE <- ""
 	}()
 
 	fmt.Println("Listening on", ipc.SOCK)

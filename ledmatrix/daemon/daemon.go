@@ -19,8 +19,8 @@ type Daemon struct {
 	Frames       chan *Frame
 }
 
-func NewState(left, right *LEDMatrix) *Daemon {
-	return &Daemon{
+func NewDaemon(left, right *LEDMatrix) *Daemon {
+	daemon := &Daemon{
 		Mode:         ipc.Nothing,
 		CurrentFrame: *EmptyFrame(),
 		Stop:         make(chan any),
@@ -28,6 +28,17 @@ func NewState(left, right *LEDMatrix) *Daemon {
 
 		Left: left, Right: right,
 	}
+
+	// gracefull shutdown by clearing the 'screen'
+	go func() {
+		<-TERMINATE
+		empty := *EmptyFrame()
+		left.writeFrame(&empty)
+		right.writeFrame(&empty)
+		TERMINATION_COMPLETE <- ""
+	}()
+
+	return daemon
 
 }
 

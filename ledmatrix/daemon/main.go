@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"go.bug.st/serial"
 )
@@ -27,6 +31,9 @@ const (
 const BAUD_RATE = 115200
 
 const MIN_BRIGHTNESS = 5
+
+var TERMINATE chan os.Signal = make(chan os.Signal)
+var TERMINATION_COMPLETE chan any = make(chan any)
 
 // serial data is written by collumn, so the rows and collumns r kinda backwards
 type Frame [][]byte
@@ -173,6 +180,43 @@ func (l *LEDMatrix) showTest() {
 }
 
 func main() {
+
+	// gracefully shutdown
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		sig := <-c
+
+		go func() {
+			time.Sleep(1 * time.Second)
+			println("Somebody wouldn't gracefully stop...\nExiting anyway...\n")
+			os.Exit(1)
+		}()
+
+		terminations := 0
+		// make sure everybody who wants to get this signal gets it
+		for {
+			select {
+			case TERMINATE <- sig:
+				fmt.Println("somebody was listening")
+				terminations++
+
+			default:
+				// 'goto considered harmful' -Dijkstra 1968
+				goto echos
+			}
+		}
+
+	echos:
+
+		for range TERMINATION_COMPLETE {
+			terminations--
+			if terminations == 0 {
+				os.Exit(0)
+			}
+		}
+	}()
+
 	ports, err := serial.GetPortsList()
 	if err != nil {
 		log.Fatal(err)
@@ -202,7 +246,7 @@ func main() {
 
 	go listen_on_socket()
 
-	daemon := NewState(matrix, matrix1)
+	daemon := NewDaemon(matrix, matrix1)
 
 	println("stargin daemon")
 
