@@ -1,10 +1,12 @@
 package main
 
 import (
+	"math"
+	"math/rand/v2"
 	"time"
 )
 
-const FPS = 1
+const FPS float64 = 2
 const BRIGHTNESS = 100
 
 type Star struct {
@@ -14,12 +16,12 @@ type Star struct {
 	Change           int
 }
 
-func NewStar(max_i, ttl int) *Star {
+func NewStar(max_i, init_i, change, ttl int) *Star {
 	return &Star{
 		MaxIntensity:     max_i,
-		CurrentIntensity: 3,
+		CurrentIntensity: init_i,
+		Change:           change,
 		TTL:              ttl,
-		Change:           1,
 	}
 }
 
@@ -32,7 +34,14 @@ func NewSky() *Sky {
 		sky[i] = make([]*Star, WIDTH)
 	}
 
-	sky[HEIGHT/2][WIDTH/2] = NewStar(3, 100)
+	for range 10 {
+		i, j := rand.IntN(HEIGHT), rand.IntN(WIDTH)
+
+		max_intensity := rand.IntN(3) + 1
+		sky[i][j] = NewStar(max_intensity, rand.IntN(max_intensity), (rand.IntN(2)*2)-1, 100)
+
+	}
+	// sky[HEIGHT/2][WIDTH/2] = NewStar(3, 100)
 
 	return &sky
 }
@@ -98,7 +107,10 @@ func (d *Daemon) Stars() {
 	frame := sky.ProduceFrame()
 	d.Frames <- frame
 
-	refresh := time.NewTimer(FPS * time.Second)
+	var delay int = int(math.Round(1.0 / FPS))
+	duration := time.Duration(delay * int(time.Second))
+	// var delay = int(d)
+	refresh := time.NewTimer(duration)
 
 	for {
 		select {
@@ -107,9 +119,12 @@ func (d *Daemon) Stars() {
 			frame := sky.ProduceFrame()
 			d.Frames <- frame
 
-			refresh = time.NewTimer(FPS * time.Second)
+			refresh = time.NewTimer(duration)
 
 		case <-d.Stop:
+			println(
+				"stopped",
+			)
 			return
 		}
 	}

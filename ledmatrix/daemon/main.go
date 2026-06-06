@@ -241,14 +241,9 @@ func main() {
 	matrix := &LEDMatrix{Port: left}
 	matrix1 := &LEDMatrix{Port: right}
 
-	batteryFrame := makeBatteryFrame(getBatteryPercentage())
-	matrix.writeFrame(&batteryFrame)
-
 	go listen_on_socket()
 
 	daemon := NewDaemon(matrix, matrix1)
-
-	println("stargin daemon")
 
 	daemon.startDaemon()
 

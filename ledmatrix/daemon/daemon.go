@@ -43,7 +43,6 @@ func NewDaemon(left, right *LEDMatrix) *Daemon {
 }
 
 func (s *Daemon) WriteFrame() error {
-	println("writing new frames")
 
 	if err := s.Left.writeFrame(&s.CurrentFrame); err != nil {
 		return err
@@ -55,7 +54,7 @@ func (s *Daemon) WriteFrame() error {
 	return nil
 }
 
-func (s Daemon) showBattery() {
+func (s *Daemon) showBattery() {
 	refreshTimer := time.NewTimer(RefreshDelay)
 
 	percentage := getBatteryPercentage()
@@ -73,20 +72,30 @@ func (s Daemon) showBattery() {
 			return
 		}
 	}
+}
 
+func (s *Daemon) Nothing() {
+	println("clearing screen")
+	frame := *EmptyFrame()
+	s.Frames <- &frame
+	<-s.Stop
 }
 
 func (s *Daemon) SetMode(mode ipc.Mode) {
-	select {
-	case s.Stop <- "":
-	default:
-	}
+	// select {
+	// case s.Stop <- "":
+	// default:
+	// }
+
+	// this is kind of scary... i wanted to do a non blocking send,
+	// but u cant guarentee the running mode is gunna be listening,
+	// and if it was 1-buffered, there would need to be a response,
+	// currently nothing can fail, but i suspect that might change...
+	s.Stop <- ""
 
 	switch mode {
 	case ipc.Nothing:
-		println("clearing screen")
-		frame := *EmptyFrame()
-		s.Frames <- &frame
+		go s.Nothing()
 
 	case ipc.Battery:
 		go s.showBattery()
@@ -99,10 +108,11 @@ func (s *Daemon) SetMode(mode ipc.Mode) {
 
 func (s *Daemon) startDaemon() {
 
+	go s.Nothing()
+
 	refreshTimer := time.NewTimer(RefreshDelay)
 
 	for {
-		println("waiting for something to do")
 		select {
 
 		case action := <-ActionChan:
