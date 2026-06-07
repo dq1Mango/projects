@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/dq1Mango/projects/ledmatrix/ipc"
@@ -102,6 +103,12 @@ func (s *Daemon) SetMode(mode ipc.Mode) {
 
 	case ipc.Stars:
 		go s.Stars()
+
+	case ipc.Sand:
+		go s.Criticalilty()
+
+	default:
+		slog.Warn("Should not happen")
 
 	}
 }

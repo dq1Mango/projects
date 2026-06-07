@@ -65,6 +65,7 @@ func handleConn(conn net.Conn) {
 		if err != nil {
 
 			writer.WriteString(err.Error())
+			writer.WriteString("\n")
 			writer.WriteString("done\n")
 			writer.Flush()
 			continue
@@ -99,7 +100,7 @@ func parseCommand(command string) (ipc.Action, error) {
 
 	switch parts[0] {
 	case "mode":
-		action, err = setMode(parts[1])
+		action, err = parseMode(parts[1])
 	default:
 		err = BadUsage
 	}
@@ -110,7 +111,7 @@ func parseCommand(command string) (ipc.Action, error) {
 
 var InvalidModeError = errors.New("Invalid mode name")
 
-func setMode(mode string) (ipc.Action, error) {
+func parseMode(mode string) (ipc.Action, error) {
 	modeNum, ok := ipc.ModeMap[mode]
 
 	if !ok {
