@@ -13,8 +13,8 @@ const SPT = 20
 var Brightnesses = map[Sand]byte{
 	0: 0,
 	1: 10,
-	2: 50,
-	3: 150,
+	2: 30,
+	3: 60,
 	4: 255,
 }
 
@@ -56,26 +56,20 @@ func (s *SandPile) PropogateAvalanches() bool {
 				s.next[i][j] = 0
 				avalanche = true
 
-				println("i represent avalanche, man these ...")
-
 				if i+1 < HEIGHT {
 					s.next[i+1][j]++
-					println("went down")
 				}
 				if i-1 >= 0 {
 					s.next[i-1][j]++
-					println("went up")
 				}
 				if j+1 < WIDTH {
 					s.next[i][j+1]++
-					println("went right")
 				}
 				if j-1 >= 0 {
 					s.next[i][j-1]++
-					println("went left")
 				}
 			} else {
-				s.next[i][j] = sand
+				s.next[i][j] += sand
 
 			}
 		}
@@ -94,8 +88,12 @@ func (s *SandPile) Tick() {
 	if avalanches {
 		return
 	}
+	s.current[HEIGHT/4][WIDTH/2]++
+	s.current[HEIGHT*3/4][WIDTH/2]++
 
-	s.current[20][4]++
+	// s.current[HEIGHT/6+1][WIDTH/2]++
+	// s.current[HEIGHT/2][WIDTH/2]++
+	// s.current[HEIGHT*5/6][WIDTH/2]++
 
 }
 
