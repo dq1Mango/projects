@@ -2,7 +2,6 @@ package main
 
 import (
 	"math"
-	"math/rand/v2"
 	"time"
 )
 
@@ -15,12 +14,26 @@ var Brightnesses = map[Sand]byte{
 	0: 0,
 	1: 10,
 	2: 50,
-	3: 200,
+	3: 150,
+	4: 255,
 }
 
 type Sand int
 
 type Lattice [][]Sand
+
+type SandPile struct {
+	current Lattice
+	next    Lattice
+}
+
+func NewSandPile() *SandPile {
+
+	return &SandPile{
+		current: *NewLattice(),
+		next:    *NewLattice(),
+	}
+}
 
 func NewLattice() *Lattice {
 
@@ -33,64 +46,63 @@ func NewLattice() *Lattice {
 	return &lattice
 }
 
-func (la *Lattice) Tick() {
-	l := *la
-	for range 1 { //SPT {
-		i, j := rand.IntN(HEIGHT), rand.IntN(WIDTH)
-		i, j = 5, 5
-		l[i][j] += 1
+func (s *SandPile) PropogateAvalanches() bool {
 
-		if l[i][j] >= CRITICAL {
-			l[i][j] = 0
-			// 	for l[i][j] > 0 {
-			//
-			// 	}
-			if i+1 < HEIGHT {
-				l[i+1][j]++
-			}
-			if i-1 >= 0 {
-				l[i-1][j]++
-			}
-			if j+1 < WIDTH {
-				l[i][j+1]++
-			}
-			if j-1 >= 0 {
-				l[i][j-1]++
+	avalanche := false
+
+	for i, row := range s.current {
+		for j, sand := range row {
+			if sand >= 4 {
+				s.next[i][j] = 0
+				avalanche = true
+
+				println("i represent avalanche, man these ...")
+
+				if i+1 < HEIGHT {
+					s.next[i+1][j]++
+					println("went down")
+				}
+				if i-1 >= 0 {
+					s.next[i-1][j]++
+					println("went up")
+				}
+				if j+1 < WIDTH {
+					s.next[i][j+1]++
+					println("went right")
+				}
+				if j-1 >= 0 {
+					s.next[i][j-1]++
+					println("went left")
+				}
+			} else {
+				s.next[i][j] = sand
+
 			}
 		}
 	}
+
+	s.current = s.next
+	s.next = *NewLattice()
+
+	return avalanche
+
 }
 
-	for range 1 { //SPT {
-		i, j := rand.IntN(HEIGHT), rand.IntN(WIDTH)
-		i, j = 5, 5
-		l[i][j] += 1
+func (s *SandPile) Tick() {
+	avalanches := s.PropogateAvalanches()
 
-		if l[i][j] >= CRITICAL {
-			l[i][j] = 0
-			// 	for l[i][j] > 0 {
-			//
-			// 	}
-			if i+1 < HEIGHT {
-				l[i+1][j]++
-			}
-			if i-1 >= 0 {
-				l[i-1][j]++
-			}
-			if j+1 < WIDTH {
-				l[i][j+1]++
-			}
-			if j-1 >= 0 {
-				l[i][j-1]++
-			}
-		}
+	if avalanches {
+		return
 	}
+
+	s.current[20][4]++
+
 }
 
-func (l *Lattice) ProduceFrame() *Frame {
+func (s *SandPile) ProduceFrame() *Frame {
 	frame := *EmptyFrame()
 
-	for i, row := range *l {
+	for i, row := range s.current {
 		for j, sand := range row {
 			frame[i][j] = Brightnesses[sand]
 		}
@@ -102,11 +114,11 @@ func (l *Lattice) ProduceFrame() *Frame {
 
 func (d *Daemon) Criticalilty() {
 
-	const fps = 2
+	const fps = 10
 
-	lattice := NewLattice()
+	sandpile := NewSandPile()
 
-	frame := lattice.ProduceFrame()
+	frame := sandpile.ProduceFrame()
 	d.Frames <- frame
 
 	var delay int = int(math.Round(1.0 / fps))
@@ -117,16 +129,13 @@ func (d *Daemon) Criticalilty() {
 	for {
 		select {
 		case <-refresh.C:
-			lattice.Tick()
-			frame := lattice.ProduceFrame()
+			sandpile.Tick()
+			frame := sandpile.ProduceFrame()
 			d.Frames <- frame
 
 			refresh = time.NewTimer(duration)
 
 		case <-d.Stop:
-			println(
-				"stopped",
-			)
 			return
 		}
 	}

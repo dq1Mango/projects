@@ -188,8 +188,9 @@ func main() {
 		sig := <-c
 
 		go func() {
-			time.Sleep(1 * time.Second)
+			time.Sleep(3 * time.Second)
 			println("Somebody wouldn't gracefully stop...\nExiting anyway...\n")
+			time.Sleep(1 * time.Second)
 			os.Exit(1)
 		}()
 
@@ -198,7 +199,6 @@ func main() {
 		for {
 			select {
 			case TERMINATE <- sig:
-				fmt.Println("somebody was listening")
 				terminations++
 
 			default:
@@ -209,12 +209,12 @@ func main() {
 
 	echos:
 
-		for range TERMINATION_COMPLETE {
-			terminations--
-			if terminations == 0 {
-				os.Exit(0)
-			}
+		for range terminations {
+			<-TERMINATION_COMPLETE
 		}
+
+		os.Exit(0)
+
 	}()
 
 	ports, err := serial.GetPortsList()
@@ -247,6 +247,6 @@ func main() {
 
 	daemon.startDaemon()
 
-	// matrix.showTest()
+	select {}
 
 }

@@ -10,6 +10,7 @@ import (
 const RefreshDelay = 10 * time.Second
 
 var ActionChan chan ipc.Action = make(chan ipc.Action)
+var StopDaemon = make(chan bool)
 
 type Daemon struct {
 	Left, Right *LEDMatrix
@@ -30,13 +31,20 @@ func NewDaemon(left, right *LEDMatrix) *Daemon {
 		Left: left, Right: right,
 	}
 
-	// gracefull shutdown by clearing the 'screen'
 	go func() {
 		<-TERMINATE
+		daemon.Stop <- true
+		// println("mode stopped")
+		StopDaemon <- true
+		// println("daemon stopped")
 		empty := *EmptyFrame()
 		left.writeFrame(&empty)
 		right.writeFrame(&empty)
+
+		time.Sleep(100 * time.Millisecond)
+
 		TERMINATION_COMPLETE <- ""
+
 	}()
 
 	return daemon
@@ -140,6 +148,11 @@ func (s *Daemon) startDaemon() {
 
 		case <-refreshTimer.C:
 			s.WriteFrame()
+
+			// gracefull shutdown by clearing the 'screen'
+		case <-StopDaemon:
+			println("I stopped")
+			return
 		}
 
 		refreshTimer = time.NewTimer(RefreshDelay)
