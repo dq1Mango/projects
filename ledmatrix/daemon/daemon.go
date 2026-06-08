@@ -33,10 +33,11 @@ func NewDaemon(left, right *LEDMatrix) *Daemon {
 
 	go func() {
 		<-TERMINATE
+		println("trying to stop mode")
 		daemon.Stop <- true
-		// println("mode stopped")
+		println("mode stopped")
 		StopDaemon <- true
-		// println("daemon stopped")
+		println("daemon stopped")
 		empty := *EmptyFrame()
 		left.writeFrame(&empty)
 		right.writeFrame(&empty)
@@ -90,6 +91,10 @@ func (s *Daemon) Nothing() {
 	<-s.Stop
 }
 
+type Module interface {
+	Start(chan *Frame)
+}
+
 func (s *Daemon) SetMode(mode ipc.Mode) {
 	// select {
 	// case s.Stop <- "":
@@ -101,6 +106,8 @@ func (s *Daemon) SetMode(mode ipc.Mode) {
 	// and if it was 1-buffered, there would need to be a response,
 	// currently nothing can fail, but i suspect that might change...
 	s.Stop <- ""
+
+	var err error
 
 	switch mode {
 	case ipc.Nothing:
@@ -115,9 +122,17 @@ func (s *Daemon) SetMode(mode ipc.Mode) {
 	case ipc.Sand:
 		go s.Criticalilty()
 
+	case ipc.Fourier:
+		fourier := &Fourier{}
+		err = fourier.Start(s.Frames, s.Stop)
+
 	default:
 		slog.Warn("Should not happen")
 
+	}
+
+	if err != nil {
+		go s.Nothing()
 	}
 }
 
@@ -142,7 +157,6 @@ func (s *Daemon) startDaemon() {
 			}
 
 		case f := <-s.Frames:
-			println("new frame")
 			s.CurrentFrame = *f
 			s.WriteFrame()
 

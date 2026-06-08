@@ -24,12 +24,18 @@ type Mode int
 const (
 	Nothing Mode = iota
 	Battery
+	Stars
+	Sand
+	Fourier
 )
 
 // man i really like go but i would love some enums
 var ModeMap = map[string]Mode{
 	"nothing": Nothing,
 	"battery": Battery,
+	"stars":   Stars,
+	"sand":    Sand,
+	"fourier": Fourier,
 }
 
 type SetMode struct {

@@ -13,9 +13,13 @@ const SPT = 20
 var Brightnesses = map[Sand]byte{
 	0: 0,
 	1: 10,
-	2: 30,
-	3: 60,
+	2: 20,
+	3: 40,
 	4: 255,
+}
+
+var Spawns = [][2]int{
+	{HEIGHT / 2, WIDTH / 2},
 }
 
 type Sand int
@@ -88,8 +92,16 @@ func (s *SandPile) Tick() {
 	if avalanches {
 		return
 	}
-	s.current[HEIGHT/4][WIDTH/2]++
-	s.current[HEIGHT*3/4][WIDTH/2]++
+
+	for _, spawn := range Spawns {
+		row, col := spawn[0], spawn[1]
+
+		s.current[row][col]++
+
+	}
+
+	// s.current[HEIGHT/4][WIDTH/2]++
+	// s.current[HEIGHT/3][WIDTH/2]++
 
 	// s.current[HEIGHT/6+1][WIDTH/2]++
 	// s.current[HEIGHT/2][WIDTH/2]++

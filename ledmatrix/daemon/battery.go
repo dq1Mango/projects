@@ -82,7 +82,7 @@ func makeBatteryFrame(percentage int) Frame {
 	baseFrame.scaleBrightness(100)
 
 	filledRows := (HEIGHT - 3) * percentage / 100
-	brightness := 10
+	brightness := 20
 
 	row := HEIGHT - 1 - 1
 
