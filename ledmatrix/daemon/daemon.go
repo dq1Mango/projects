@@ -122,6 +122,9 @@ func (s *Daemon) SetMode(mode ipc.Mode) {
 	case ipc.Sand:
 		go s.Criticalilty()
 
+	case ipc.Forest:
+		go s.ForestFire()
+
 	case ipc.Fourier:
 		fourier := &Fourier{}
 		err = fourier.Start(s.Frames, s.Stop)

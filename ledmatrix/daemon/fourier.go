@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -16,7 +17,8 @@ type Fourier struct {
 }
 
 func PickMonitor() string {
-	return "alsa_output.usb-Framework_Audio_Expansion_Card-00.analog-stereo.monitor"
+	// return "alsa_output.usb-Framework_Audio_Expansion_Card-00.analog-stereo.monitor"
+	return "bluez_output.80_99_E7_1E_C9_6D.1.monitor"
 }
 
 func parseS16LEStereo(buf []byte) (left []complex128, right []complex128) {
@@ -126,7 +128,8 @@ func (f *Fourier) Start(frames chan<- *Frame, stop chan any) error {
 	}()
 
 	const fps float64 = 1000
-	const FFT_SIZE = 4096
+	// const FFT_SIZE = 4096
+	const FFT_SIZE = 2048
 	const channels = 2
 
 	// skips := sample_rate/FFT_SIZE*channels/fps - 1
@@ -134,7 +137,39 @@ func (f *Fourier) Start(frames chan<- *Frame, stop chan any) error {
 	refresh := time.NewTicker(time.Second / time.Duration(fps))
 	defer refresh.Stop()
 
-	buf := make([]byte, FFT_SIZE*channels)
+	var samples *[]byte
+
+	buf1 := make([]byte, FFT_SIZE*channels*2)
+	buf2 := make([]byte, FFT_SIZE*channels*2)
+
+	samples = &buf1
+
+	go func() error {
+
+		for {
+			// n, err := stdout.Read(buf2)
+			n, err := io.ReadFull(stdout, buf2)
+
+			// println("read da buffa")
+			// if err == io.EOF {
+			// 	println("bork")
+			// 	break
+			// }
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stderr, "read %d bytes of audio\n", n)
+
+			samples = &buf2
+
+			buf1, buf2 = buf2, buf1
+		}
+	}()
+
+	frame_count := 0
+	start_time := time.Now()
+
 	for {
 
 		select {
@@ -143,19 +178,6 @@ func (f *Fourier) Start(frames chan<- *Frame, stop chan any) error {
 			return nil
 		default:
 		}
-
-		n, err := stdout.Read(buf)
-
-		// println("read da buffa")
-		// if err == io.EOF {
-		// 	println("bork")
-		// 	break
-		// }
-		if err != nil {
-			return err
-		}
-
-		fmt.Fprintf(os.Stderr, "read %d bytes of audio\n", n)
 
 		// select {
 		// case <-refresh.C:
@@ -167,7 +189,7 @@ func (f *Fourier) Start(frames chan<- *Frame, stop chan any) error {
 		//
 		// }
 
-		complicated, _ := parseS16LEStereo(buf)
+		complicated, _ := parseS16LEStereo(*samples)
 
 		err = gofft.FFT(complicated)
 		if err != nil {
@@ -183,9 +205,15 @@ func (f *Fourier) Start(frames chan<- *Frame, stop chan any) error {
 		// fmt.Println(selected)
 
 		frame := FourierFrame(selected)
-
+		_ = frame
+		//
 		frames <- frame
 
+		elapsed := time.Since(start_time)
+
+		fmt.Println("fps = ", float64(frame_count)/elapsed.Seconds())
+
+		frame_count++
 		// buf[:n] is raw interleaved s16le PCM samples
 		// do something with buf[:n]...
 	}

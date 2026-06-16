@@ -26,6 +26,7 @@ const (
 	Battery
 	Stars
 	Sand
+	Forest
 	Fourier
 )
 
@@ -35,6 +36,7 @@ var ModeMap = map[string]Mode{
 	"battery": Battery,
 	"stars":   Stars,
 	"sand":    Sand,
+	"forest":  Forest,
 	"fourier": Fourier,
 }
 
