@@ -48,7 +48,7 @@ const App = struct {
     io: std.Io,
     creds: ?Creds,
     rand: std.Random,
-    client: *http.Client,
+    client: http.Client,
 
     fn init(gpa: std.mem.Allocator, io: std.Io, home: []const u8) !App {
         const path = std.Io.Dir.path;
@@ -66,7 +66,7 @@ const App = struct {
         const rng_impl: std.Random.IoSource = .{ .io = io };
         const secureRand = rng_impl.interface();
 
-        var client: http.Client = .{ .allocator = gpa, .io = io };
+        const client: http.Client = .{ .allocator = gpa, .io = io };
 
         var app = App{
             .creds = null,
@@ -74,7 +74,7 @@ const App = struct {
             .io = io,
             .gpa = gpa,
             .rand = secureRand,
-            .client = &client,
+            .client = client,
         };
 
         app.readCreds() catch {};
@@ -82,7 +82,7 @@ const App = struct {
         std.debug.print("is authed?: {}\n", .{app.isAuthenticated()});
         if (!app.isAuthenticated()) {
             app.authenticate() catch |e| {
-                app.deinit();
+                print("auth error: {any}", .{e});
                 return e;
             };
         }
@@ -91,7 +91,6 @@ const App = struct {
     }
 
     fn deinit(self: *App) void {
-        self.credsDir.close(self.io);
         self.client.deinit();
     }
 
@@ -188,7 +187,7 @@ const App = struct {
         try stdout.print("Visit the following url in your browser:\n{s}\n", .{auth_url});
         try stdout.flush();
 
-        try self.openUrl(auth_url);
+        // try self.openUrl(auth_url);
 
         try stdout.print("\n", .{});
         try stdout.print("Paste Auth Key Here: ", .{});
@@ -274,7 +273,7 @@ const App = struct {
     // fn refreshCreds() void {}
 };
 
-pub fn main(init: std.process.Init) !void {
+pub fn main(init: std.process.Init) void {
     const allocator = init.gpa;
     const addr = httpz.Config.Address.localhost(5882);
 
@@ -282,7 +281,7 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(home);
     var app = App.init(init.gpa, init.io, home) catch |e| {
         switch (e) {
-            AuthenticationError.InvalidToken, AuthenticationError.ServerError => {
+            AuthenticationError => {
                 std.debug.print(
                     "welp we couldn't authenticate, heres the error that means nothing: {any}\n",
                     .{e},
@@ -297,6 +296,9 @@ pub fn main(init: std.process.Init) !void {
     };
     defer app.deinit();
 
+    // More advanced cases will use a custom "Handler" instead of "void".
+    // The last parameter is our handler instance; since we have a "void"
+    // handler, we passed a void ({}) value.
     var server = try httpz.Server(*App).init(init.io, allocator, .{
         // use .all(5882) to bind to all interfaces, i.e. 0.0.0.0
         .address = addr,
