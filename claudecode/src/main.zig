@@ -15,14 +15,18 @@ const AUTH_ENDPOINT = "https://claude.ai/oauth/authorize";
 const client_id = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const oauth_endpoint = "https://platform.claude.com/v1/oauth/token";
 
+// const default_refresh_expiry: usize = 2460053;
+
 const Creds = struct {
     token: []const u8,
     refresh: []const u8,
-    expires: c_long,
+    // bofa deez r in unix seconds
+    expires: usize,
+    refresh_expires: usize,
 };
 
 fn base64UrlEncode(input: []const u8, output: []u8) []const u8 {
-    const encoder = std.base64.Base64Encoder.init(std.base64.standard_alphabet_chars, null);
+    const encoder = std.base64.Base64Encoder.init(std.base64.url_safe_alphabet_chars, null);
     return encoder.encode(output, input);
 }
 
@@ -37,6 +41,28 @@ fn generateChallenge(verifier: []const u8, challenge: []u8) []const u8 {
     return base64UrlEncode(&sha256(verifier), challenge);
 }
 
+const Orginization = struct {
+    uuid: []const u8,
+    name: []const u8,
+};
+
+const Account = struct {
+    uuid: []const u8,
+    email_address: []const u8,
+};
+
+const TokenResponse = struct {
+    token_type: []const u8,
+    access_token: []const u8,
+    expires_in: usize,
+    refresh_token: []const u8,
+    scope: []const u8,
+    token_uuid: []const u8,
+    refresh_token_expires_in: usize,
+    organization: Orginization,
+    account: Account,
+};
+
 const AuthenticationError = error{
     InvalidToken,
     ServerError,
@@ -50,7 +76,7 @@ const App = struct {
     rand: std.Random,
     client: *http.Client,
 
-    fn init(gpa: std.mem.Allocator, io: std.Io, home: []const u8) !App {
+    fn init(gpa: std.mem.Allocator, io: std.Io, home: []const u8, client: *std.http.Client) !App {
         const path = std.Io.Dir.path;
         const homeDir = try std.Io.Dir.openDirAbsolute(io, home, std.Io.Dir.OpenOptions{});
 
@@ -66,15 +92,13 @@ const App = struct {
         const rng_impl: std.Random.IoSource = .{ .io = io };
         const secureRand = rng_impl.interface();
 
-        var client: http.Client = .{ .allocator = gpa, .io = io };
-
         var app = App{
             .creds = null,
             .credsDir = dir,
             .io = io,
             .gpa = gpa,
             .rand = secureRand,
-            .client = &client,
+            .client = client,
         };
 
         app.readCreds() catch {};
@@ -92,7 +116,6 @@ const App = struct {
 
     fn deinit(self: *App) void {
         self.credsDir.close(self.io);
-        self.client.deinit();
     }
 
     fn generateVerifier(self: *App, verifier: []u8) []const u8 {
@@ -114,17 +137,29 @@ const App = struct {
         self.creds = creds.value;
     }
 
+    fn writeCreds(self: *App, creds: Creds) !void {
+        self.creds = creds;
+
+        const formatter = std.json.fmt(creds, .{ .whitespace = .indent_2 });
+
+        var contents: std.Io.Writer.Allocating = .init(self.gpa);
+        defer contents.deinit();
+
+        try contents.writer.print("{f}", .{formatter});
+
+        const file = try self.credsDir.openFile(self.io, CREDS_FILE, .{ .lock = .exclusive });
+        defer file.close(self.io);
+
+        try file.writeStreamingAll(self.io, contents.written());
+    }
+
     fn isAuthenticated(self: *App) bool {
-        if (self.creds == null) {
+        if (self.creds) |crds| {
+            const now: usize = @intCast(c.time(null));
+            return (now < crds.expires);
+        } else {
             return false;
         }
-
-        const now = c.time(null);
-
-        return (now < self.creds.?.expires);
-        // if (self.creds.?.expires.secs) {
-        //
-        // }
     }
 
     pub fn openUrl(self: *App, url: []const u8) !void {
@@ -149,7 +184,10 @@ const App = struct {
         var challenge_buf: [64]u8 = undefined;
         const challenge = generateChallenge(verifier, &challenge_buf);
 
-        const state = self.generateVerifier(&verifier_buf);
+        var state_buf: [64]u8 = undefined;
+        const state = self.generateVerifier(&state_buf);
+
+        print("verifier: {s}\nchallenge: {s}\nstate: {s}\n", .{ verifier, challenge, state });
 
         const redirect = "https://console.anthropic.com/oauth/code/callback";
         const scope = "org:create_api_key user:profile user:inference";
@@ -202,16 +240,6 @@ const App = struct {
 
         std.debug.print("we gyatt a key: '{s}'\n", .{key});
 
-        const uri = try std.Uri.parse(oauth_endpoint);
-
-        var req = try self.client.request(.POST, uri, .{
-            .extra_headers = &.{
-                .{ .name = "Content-Type", .value = "application/json" },
-                .{ .name = "User-Agent", .value = "axios/1.15.2" },
-            },
-        });
-        defer req.deinit();
-
         var spliterator = std.mem.splitScalar(u8, key, '#');
         var parts: [2][]const u8 = undefined;
 
@@ -248,39 +276,145 @@ const App = struct {
             .code_verifier = verifier,
         }, .{});
 
-        var string: std.Io.Writer.Allocating = .init(self.gpa);
-        defer string.deinit();
+        var payload: std.Io.Writer.Allocating = .init(self.gpa);
+        defer payload.deinit();
 
-        try string.writer.print("{f}", .{formatter});
+        try payload.writer.print("{f}", .{formatter});
 
-        try req.sendBodyComplete(string.written());
+        print("heres our bodyody:\n{s}\n", .{payload.written()});
 
-        var body_buf: [40960]u8 = undefined;
-        var response = try req.receiveHead(&body_buf);
+        const uri = try std.Uri.parse(oauth_endpoint);
+
+        var response_buf: [65536]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&response_buf);
+
+        const response = try self.client.fetch(
+            std.http.Client.FetchOptions{
+                .location = .{ .uri = uri },
+                .method = .POST,
+                .headers = .{
+                    .content_type = .{ .override = "application/json" },
+                    .user_agent = .{ .override = "axios/1.15.2" },
+                },
+                .payload = payload.written(),
+                .response_writer = &w,
+            },
+        );
 
         // Occasionally, httpbin might time out, so we disregard cases
         // where the response status is not okay.
-        if (response.head.status != .ok) {
+        if (response.status != .ok) {
+            std.debug.print("got bad status: {d}\n", .{response.status});
+            // return AuthenticationError.ServerError;
+        }
+
+        print("Body:\n{s}\n", .{w.buffered()});
+
+        if (response.status != .ok) {
             return AuthenticationError.ServerError;
         }
 
-        const body = try response.reader(&.{}).allocRemaining(self.gpa, .unlimited);
-        defer self.gpa.free(body);
-        print("Body:\n{s}\n", .{body});
+        const parsed = try std.json.parseFromSlice(
+            TokenResponse,
+            self.gpa,
+            w.buffered(),
+            .{ .ignore_unknown_fields = true },
+        );
+        defer parsed.deinit();
+
+        print("heey it worked: {any}", .{parsed.value});
+
+        const now = c.time(null);
+        const zig_now: usize = @intCast(now);
+
+        print("deez r seconds right: ? {d}", .{now});
+
+        const creds: Creds = .{
+            .token = parsed.value.access_token,
+            .refresh = parsed.value.refresh_token,
+            .expires = zig_now + parsed.value.expires_in,
+            .refresh_expires = zig_now + parsed.value.refresh_token_expires_in,
+        };
+
+        try self.writeCreds(creds);
     }
 
-    // fn writeCreds(self: App) !void {}
-    //
-    // fn refreshCreds() void {}
+    fn refreshCreds(self: *App) !void {
+        const body = .{
+            .grant_type = "refresh_token",
+            .client_id = client_id,
+            .refresh_token = self.creds.refresh_token,
+        };
+
+        var formatter = std.json.fmt(body, .{});
+
+        var payload: std.Io.Writer.Allocating = .init(self.gpa);
+        defer payload.deinit();
+
+        try formatter.format(&payload.writer);
+
+        print("refreshing token: {s}", payload.written());
+
+        var response_buf: [65536]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&response_buf);
+
+        const response = try self.client.fetch(
+            std.http.Client.FetchOptions{
+                .location = .{ .url = oauth_endpoint },
+                .method = .POST,
+                .headers = .{
+                    .content_type = .{ .override = "application/json" },
+                    .user_agent = .{ .override = "axios/1.15.2" },
+                },
+                .payload = payload.written(),
+                .response_writer = &w,
+            },
+        );
+
+        if (response.status != .ok) {
+            print("got bad status: {d}\n", .{response.status});
+        }
+
+        print("refresh response body: {s}\n", w.buffered());
+
+        const parsed = try std.json.parseFromSlice(
+            TokenResponse,
+            self.gpa,
+            w.buffered(),
+            .{ .ignore_unknown_fields = true },
+        );
+        defer parsed.deinit();
+        const value = parsed.value;
+
+        const now: usize = @intCast(c.time(null));
+
+        const creds: Creds = .{
+            .token = value.access_token,
+            .refresh = value.refresh_token,
+            .expires = now + value.expires_in,
+            .refresh_expires = now + value.refresh_token_expires_in,
+        };
+
+        try self.writeCreds(creds);
+    }
 };
+
+const MainError = AuthenticationError || error{NoHome};
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const addr = httpz.Config.Address.localhost(5882);
 
-    const home = try init.minimal.environ.getAlloc(init.gpa, "HOME");
-    defer init.gpa.free(home);
-    var app = App.init(init.gpa, init.io, home) catch |e| {
+    const home = init.environ_map.get("HOME") orelse {
+        return MainError.NoHome;
+    };
+
+    var client: http.Client = .{ .allocator = allocator, .io = init.io };
+    defer client.deinit();
+
+    try client.initDefaultProxies(init.arena.allocator(), init.environ_map);
+
+    var app = App.init(init.gpa, init.io, home, &client) catch |e| {
         switch (e) {
             AuthenticationError.InvalidToken, AuthenticationError.ServerError => {
                 std.debug.print(
@@ -308,7 +442,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     var router = try server.router(.{});
-    router.get("/api/user/:id", getUser, .{});
+    router.get("/", proxyAnthropic, .{});
 
     std.debug.print("listening on -- {f}\n", .{addr});
 
@@ -325,7 +459,8 @@ pub fn main(init: std.process.Init) !void {
     try server.listen();
 }
 
-fn getUser(_: *App, req: *httpz.Request, res: *httpz.Response) !void {
+fn proxyAnthropic(_: *App, req: *httpz.Request, res: *httpz.Response) !void {
     res.status = 200;
+    // req.headers.
     try res.json(.{ .id = req.param("id").?, .name = "Teg" }, .{});
 }
