@@ -1,28 +1,33 @@
 const std = @import("std");
 const http = std.http;
 const print = std.debug.print;
+const log = std.log;
+const mem = std.mem;
+const Io = std.Io;
+const net = Io.net;
+const awake = Io.Clock.awake;
+const IpAddress = net.IpAddress;
 
-const httpz = @import("httpz");
-
-const c = @cImport({
-    @cInclude("time.h");
-});
+// const httpz = @import("httpz");
 
 const APP_NAME = "zigclaude";
 const CREDS_FILE = "creds.json";
 
-const AUTH_ENDPOINT = "https://claude.ai/oauth/authorize";
+// const AUTH_ENDPOINT = "https://claude.ai/oauth/authorize";
 const client_id = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const oauth_endpoint = "https://platform.claude.com/v1/oauth/token";
+const token_endpoint = "https://api.anthropic.com";
 
 // const default_refresh_expiry: usize = 2460053;
 
 const Creds = struct {
+    mewing: std.Io.Mutex = .init,
+
     token: []const u8,
     refresh: []const u8,
     // bofa deez r in unix seconds
-    expires: usize,
-    refresh_expires: usize,
+    expires: Io.Timestamp,
+    refresh_expires: Io.Timestamp,
 };
 
 fn base64UrlEncode(input: []const u8, output: []u8) []const u8 {
@@ -54,11 +59,11 @@ const Account = struct {
 const TokenResponse = struct {
     token_type: []const u8,
     access_token: []const u8,
-    expires_in: usize,
+    expires_in: i64,
     refresh_token: []const u8,
     scope: []const u8,
     token_uuid: []const u8,
-    refresh_token_expires_in: usize,
+    refresh_token_expires_in: i64,
     organization: Orginization,
     account: Account,
 };
@@ -72,9 +77,11 @@ const App = struct {
     credsDir: std.Io.Dir,
     gpa: std.mem.Allocator,
     io: std.Io,
-    creds: ?Creds,
     rand: std.Random,
     client: *http.Client,
+
+    creds: ?Creds,
+    refreshTask: ?Io.Future(anyerror!void),
 
     fn init(gpa: std.mem.Allocator, io: std.Io, home: []const u8, client: *std.http.Client) !App {
         const path = std.Io.Dir.path;
@@ -99,6 +106,7 @@ const App = struct {
             .gpa = gpa,
             .rand = secureRand,
             .client = client,
+            .refreshTask = null,
         };
 
         app.readCreds() catch {};
@@ -110,6 +118,9 @@ const App = struct {
                 return e;
             };
         }
+
+        const refreshTask = try io.concurrent(App.continualRefresh, .{&app});
+        app.refreshTask = refreshTask;
 
         return app;
     }
@@ -155,8 +166,8 @@ const App = struct {
 
     fn isAuthenticated(self: *App) bool {
         if (self.creds) |crds| {
-            const now: usize = @intCast(c.time(null));
-            return (now < crds.expires);
+            const now = awake.now(self.io);
+            return (now.toSeconds() < crds.expires.toSeconds());
         } else {
             return false;
         }
@@ -324,26 +335,34 @@ const App = struct {
 
         print("heey it worked: {any}", .{parsed.value});
 
-        const now = c.time(null);
-        const zig_now: usize = @intCast(now);
+        const now = awake.now(self.io);
 
         print("deez r seconds right: ? {d}", .{now});
 
         const creds: Creds = .{
             .token = parsed.value.access_token,
             .refresh = parsed.value.refresh_token,
-            .expires = zig_now + parsed.value.expires_in,
-            .refresh_expires = zig_now + parsed.value.refresh_token_expires_in,
+            .expires = now.addDuration(
+                Io.Duration.fromSeconds(parsed.value.expires_in),
+            ),
+            .refresh_expires = now.addDuration(
+                Io.Duration.fromSeconds(parsed.value.refresh_token_expires_in),
+            ),
         };
 
         try self.writeCreds(creds);
     }
 
+    const RefreshError = error{NoExistingRefreshToken};
+
     fn refreshCreds(self: *App) !void {
+        const refreshToken = self.creds orelse {
+            return RefreshError.NoExistingRefreshToken;
+        };
         const body = .{
             .grant_type = "refresh_token",
             .client_id = client_id,
-            .refresh_token = self.creds.refresh_token,
+            .refresh_token = refreshToken,
         };
 
         var formatter = std.json.fmt(body, .{});
@@ -353,7 +372,7 @@ const App = struct {
 
         try formatter.format(&payload.writer);
 
-        print("refreshing token: {s}", payload.written());
+        print("refreshing token: {s}", .{payload.written()});
 
         var response_buf: [65536]u8 = undefined;
         var w: std.Io.Writer = .fixed(&response_buf);
@@ -375,7 +394,7 @@ const App = struct {
             print("got bad status: {d}\n", .{response.status});
         }
 
-        print("refresh response body: {s}\n", w.buffered());
+        print("refresh response body: {s}\n", .{w.buffered()});
 
         const parsed = try std.json.parseFromSlice(
             TokenResponse,
@@ -386,16 +405,28 @@ const App = struct {
         defer parsed.deinit();
         const value = parsed.value;
 
-        const now: usize = @intCast(c.time(null));
+        const now = awake.now(self.io);
 
         const creds: Creds = .{
             .token = value.access_token,
             .refresh = value.refresh_token,
-            .expires = now + value.expires_in,
-            .refresh_expires = now + value.refresh_token_expires_in,
+            .expires = now.addDuration(.fromSeconds(value.expires_in)),
+            .refresh_expires = now.addDuration(.fromSeconds(value.refresh_token_expires_in)),
         };
 
         try self.writeCreds(creds);
+    }
+
+    pub fn continualRefresh(app: *App) anyerror!void {
+        const grace_time = 10 * 60;
+        while (true) {
+            const now = awake.now(app.io);
+            try app.io.sleep(.fromSeconds(
+                app.creds.?.expires.toSeconds() - now.toSeconds() - grace_time,
+            ), .real);
+
+            try app.refreshCreds();
+        }
     }
 };
 
@@ -403,7 +434,7 @@ const MainError = AuthenticationError || error{NoHome};
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
-    const addr = httpz.Config.Address.localhost(5882);
+    // const addr = httpz.Config.Address.localhost(5882);
 
     const home = init.environ_map.get("HOME") orelse {
         return MainError.NoHome;
@@ -431,20 +462,21 @@ pub fn main(init: std.process.Init) !void {
     };
     defer app.deinit();
 
-    var server = try httpz.Server(*App).init(init.io, allocator, .{
-        // use .all(5882) to bind to all interfaces, i.e. 0.0.0.0
-        .address = addr,
-    }, &app);
-    defer {
-        // clean shutdown, finishes serving any live requests
-        server.stop();
-        server.deinit();
-    }
-
-    var router = try server.router(.{});
-    router.get("/", proxyAnthropic, .{});
-
-    std.debug.print("listening on -- {f}\n", .{addr});
+    // var server = try httpz.Server(*App).init(init.io, allocator, .{
+    //     // use .all(5882) to bind to all interfaces, i.e. 0.0.0.0
+    //     .address = addr,
+    // }, &app);
+    // defer {
+    //     // clean shutdown, finishes serving any live requests
+    //     server.stop();
+    //     server.deinit();
+    // }
+    //
+    //
+    // var router = try server.router(.{});
+    // router.get("/", proxyAnthropic, .{});
+    //
+    // std.debug.print("listening on -- {f}\n", .{addr});
 
     // try stdout.print("listening on -- ", .{});
     // try addr.format(stdout);
@@ -456,11 +488,264 @@ pub fn main(init: std.process.Init) !void {
     // try stdout.writeStreamingAll(init.io, "Listening on {}", addr);
 
     // blocks
-    try server.listen();
+    // try server.listen();
+    //
+    const listen_port = 1234;
+
+    const addr = try IpAddress.parseIp4("0.0.0.0", listen_port);
+    var listener = try addr.listen(init.io, .{ .reuse_address = true });
+    defer listener.deinit(init.io);
+
+    var connections: Io.Group = .init;
+    defer connections.cancel(init.io);
+
+    print("proxy listening on http://0.0.0.0:{d}", .{listen_port});
+    print("forwarding to https://{s}", .{token_endpoint});
+    print("injecting Authorization: {s}", .{app.creds.?.token});
+
+    while (true) {
+        const stream = try listener.accept(init.io);
+        connections.concurrent(
+            init.io,
+            handleConnection,
+            .{ init.io, allocator, stream, &app.creds.? },
+        ) catch |err| {
+            print("connection error: {any}", .{err});
+        };
+    }
 }
 
-fn proxyAnthropic(_: *App, req: *httpz.Request, res: *httpz.Response) !void {
-    res.status = 200;
-    // req.headers.
-    try res.json(.{ .id = req.param("id").?, .name = "Teg" }, .{});
+fn handleConnection(
+    io: Io,
+    allocator: mem.Allocator,
+    stream: net.Stream,
+    creds: *Creds,
+) !void {
+    defer stream.close(io);
+
+    // Buffers for the incoming client connection.
+    var in_buf: [65536]u8 = undefined;
+    var out_buf: [8192]u8 = undefined;
+
+    var stream_reader = net.Stream.Reader.init(stream, io, &in_buf);
+    var stream_writer = net.Stream.Writer.init(stream, io, &out_buf);
+
+    var server = http.Server.init(&stream_reader.interface, &stream_writer.interface);
+
+    // Handle potentially multiple requests on the same connection (keep-alive).
+    while (true) {
+        var request = server.receiveHead() catch |err| switch (err) {
+            error.HttpConnectionClosing => return,
+            else => {
+                print("failed to receive request head: {any}", .{err});
+                return;
+            },
+        };
+
+        proxyRequest(io, allocator, &request, creds) catch |err| {
+            print("proxy error for {s} {s}: {any}", .{
+                @tagName(request.head.method),
+                request.head.target,
+                err,
+            });
+            // Try to send an error response back to the client.
+            request.respond("502 Bad Gateway\n", .{
+                .status = .bad_gateway,
+                .extra_headers = &.{
+                    .{ .name = "content-type", .value = "text/plain" },
+                },
+            }) catch return;
+        };
+    }
+}
+
+fn proxyRequest(
+    io: Io,
+    gpa: mem.Allocator,
+    request: *http.Server.Request,
+    creds: *Creds,
+) !void {
+    log.info("{s} {s}", .{ @tagName(request.head.method), request.head.target });
+
+    // ── 1. Collect incoming headers (skip hop-by-hop & authorization) ──
+
+    // We'll build the list of extra headers for the upstream request.
+    // Worst case we forward all incoming headers + 1 for Authorization.
+    var header_list = try std.ArrayList(http.Header).initCapacity(gpa, 16);
+    defer header_list.deinit(gpa);
+
+    var it = request.iterateHeaders();
+    while (it.next()) |hdr| {
+        // Skip hop-by-hop headers that shouldn't be forwarded.
+        if (std.ascii.eqlIgnoreCase(hdr.name, "connection")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "keep-alive")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "proxy-authorization")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "proxy-connection")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "te")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "transfer-encoding")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "upgrade")) continue;
+
+        // Strip any existing Authorization – we'll add our own.
+        if (std.ascii.eqlIgnoreCase(hdr.name, "authorization")) continue;
+
+        // Skip headers the client library manages itself.
+        if (std.ascii.eqlIgnoreCase(hdr.name, "host")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "user-agent")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "accept-encoding")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "content-length")) continue;
+
+        try header_list.append(gpa, .{ .name = hdr.name, .value = hdr.value });
+    }
+
+    // ── 2. Read the request body (if any) ──
+
+    var body: ?[]const u8 = null;
+    defer if (body) |b| gpa.free(b);
+
+    if (request.head.method.requestHasBody()) {
+        if (request.head.content_length) |len| {
+            if (len > 0 and len <= 10 * 1024 * 1024) { // 10 MB limit
+                var body_buf: [4096]u8 = undefined;
+                var reader = request.readerExpectNone(&body_buf);
+
+                var collected = try std.ArrayList(u8).initCapacity(gpa, len);
+                defer collected.deinit(gpa);
+
+                var tmp: [8192]u8 = undefined;
+                while (true) {
+                    const n = reader.readSliceShort(&tmp) catch {
+                        break;
+                    };
+                    if (n == 0) break;
+                    try collected.appendSlice(gpa, tmp[0..n]);
+                }
+
+                body = try collected.toOwnedSlice(gpa);
+            }
+        }
+    }
+
+    // ── 3. Build the upstream URI ──
+
+    // The target from the client is typically just a path like "/api/data".
+    // We construct a full URI pointing at the upstream.
+    var uri_buf: [8192]u8 = undefined;
+    const uri_str = try std.fmt.bufPrint(&uri_buf, "{s}{s}", .{
+        token_endpoint,
+        request.head.target,
+    });
+    const uri = try std.Uri.parse(uri_str);
+
+    // ── 4. Make the upstream request ──
+
+    var client = http.Client{
+        .allocator = gpa,
+        .io = io,
+    };
+    defer client.deinit();
+
+    try creds.mewing.lock(io);
+
+    const auth_header = std.fmt.allocPrint(
+        gpa,
+        "Authorization {s}",
+        .{creds.token},
+    ) catch |err| {
+        creds.mewing.unlock(io);
+        return err;
+    };
+
+    creds.mewing.unlock(io);
+
+    var upstream_req = try client.request(request.head.method, uri, .{
+        .redirect_behavior = .unhandled,
+        .keep_alive = false,
+        .headers = .{
+            // Let the client library set the default host from the URI.
+            .host = .default,
+            // Inject our Authorization header via the override mechanism.
+            .authorization = .{ .override = auth_header },
+            .user_agent = .default,
+            .connection = .default,
+            .accept_encoding = .default,
+            .content_type = if (request.head.content_type) |ct|
+                .{ .override = ct }
+            else
+                .default,
+        },
+        .extra_headers = header_list.items,
+    });
+    defer upstream_req.deinit();
+
+    // Send the request (with body if present).
+    if (body) |b| {
+        upstream_req.transfer_encoding = .{ .content_length = b.len };
+        var bw = try upstream_req.sendBodyUnflushed(&.{});
+        bw.writer.end = b.len;
+        try bw.end();
+        try upstream_req.connection.?.flush();
+    } else {
+        try upstream_req.sendBodiless();
+    }
+
+    // ── 5. Receive the upstream response head ──
+
+    var redirect_buf: [1]u8 = undefined;
+    var response = try upstream_req.receiveHead(&redirect_buf);
+
+    // ── 6. Collect upstream response headers to forward back ──
+
+    var resp_headers = try std.ArrayList(http.Header).initCapacity(gpa, 16);
+    defer resp_headers.deinit(gpa);
+
+    var resp_it = response.head.iterateHeaders();
+    while (resp_it.next()) |hdr| {
+        // Skip hop-by-hop and headers the server library manages.
+        if (std.ascii.eqlIgnoreCase(hdr.name, "connection")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "keep-alive")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "transfer-encoding")) continue;
+        if (std.ascii.eqlIgnoreCase(hdr.name, "content-length")) continue;
+
+        try resp_headers.append(gpa, .{ .name = hdr.name, .value = hdr.value });
+    }
+
+    // ── 7. Stream the upstream response body back to the client ──
+    //
+    // Use respondStreaming so bytes flow through without buffering the
+    // entire body in memory.  If the upstream provided a content-length
+    // we forward it so the client knows the size up front; otherwise
+    // the server library falls back to chunked transfer-encoding.
+
+    var stream_buf: [16384]u8 = undefined;
+    var body_writer = try request.respondStreaming(&stream_buf, .{
+        .content_length = response.head.content_length,
+        .respond_options = .{
+            .status = response.head.status,
+            .reason = response.head.reason,
+            .extra_headers = resp_headers.items,
+        },
+    });
+
+    var transfer_buf: [16384]u8 = undefined;
+    var body_reader = response.reader(&transfer_buf);
+
+    var total_bytes: u64 = 0;
+    var read_buf: [16384]u8 = undefined;
+    while (true) {
+        const n = body_reader.readSliceShort(&read_buf) catch {
+            break;
+        };
+        if (n == 0) break;
+        try body_writer.writer.writeAll(read_buf[0..n]);
+        total_bytes += n;
+    }
+
+    try body_writer.end();
+    try request.server.out.flush();
+
+    log.info("  -> {d} {s} ({d} bytes streamed)", .{
+        @intFromEnum(response.head.status),
+        response.head.reason,
+        total_bytes,
+    });
 }
