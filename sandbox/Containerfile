@@ -1,0 +1,40 @@
+ARG NIX_VERSION=2.34.8
+FROM nixos/nix:${NIX_VERSION}
+# FROM nixos/nix:2.34.8
+
+# The exact nixpkgs commit you want baked in.
+ARG NIXPKGS_REV=e7a3ca8092b61ff85b6a45bf863ea2b2d6a661b3
+
+# Flakes + new CLI on; build sandbox off (it can't nest in a rootless container).
+RUN printf '%s\n' \
+      'experimental-features = nix-command flakes' \
+      'sandbox = false' \
+      >> /etc/nix/nix.conf
+
+RUN nix registry add --registry /etc/nix/registry.json \
+      nixpkgs github:NixOS/nixpkgs/${NIXPKGS_REV}
+
+# Warm the store with the pinned nixpkgs source, and bake in your tools.
+RUN nix flake metadata nixpkgs >/dev/null && \
+    nix profile install \
+      nixpkgs#fish nixpkgs#ncurses nixpkgs#starship nixpkgs#zoxide
+
+# Your fish config — ordinary writable files now.
+COPY ./fish/ /root/.config/fish/
+
+COPY  ./claude/ /root/.local/share/claude/
+
+RUN chmod 755 /
+RUN mkdir /lib64/
+RUN cp /nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib/ld-linux-x86-64.so.2 /lib64/
+
+# RUN 
+
+ENV HOME=/root \
+    TERM=xterm-256color \
+    LANG=C.UTF-8 \
+    TERMINFO_DIRS=/root/.nix-profile/share/terminfo \
+    SHELL=/root/.nix-profile/bin/fish
+
+# WORKDIR /workspace
+CMD ["fish"]
