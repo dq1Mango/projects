@@ -6,4 +6,6 @@ podman run --rm -it \
     --cap-drop ALL \
     --memory 4g --cpus 4 \
     -v sandbox-home:/root \
+    -v /home/mqngo/.config/nvim:/root/.config/nvim:ro \
+    --log-driver=none \
     sandbox:latest
