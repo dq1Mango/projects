@@ -1,0 +1,502 @@
+[
+  {
+    "content": "Morning everyone. Anyone else's home wifi decide to die at 2am for no reason?",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-17T08:07:00Z"
+  },
+  {
+    "content": "Mine's been rock solid, might be your router's firmware. When did you last update it?",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-17T08:27:00Z"
+  },
+  {
+    "content": "Honestly no idea. Could be years.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-17T09:00:00Z"
+  },
+  {
+    "content": "Update it today, don't wait. Old firmware is basically an open invitation.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-17T09:46:00Z"
+  },
+  {
+    "content": "Speaking of open invitations, are we still on for the hike Saturday?",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-17T10:45:00Z"
+  },
+  {
+    "content": "Yes! Weather looks clear, low chance of rain until Sunday.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-17T11:57:00Z"
+  },
+  {
+    "content": "Perfect. Same trailhead as last time?",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-17T13:22:00Z"
+  },
+  {
+    "content": "Same one. I'll bring the trail mix again.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-17T15:00:00Z"
+  },
+  {
+    "content": "I'll bring a proper first aid kit this time, last hike we had nothing for blisters.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-17T16:51:00Z"
+  },
+  {
+    "content": "Learning from experience, I like it.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-17T18:55:00Z"
+  },
+  {
+    "content": "Can someone remind me what time we're leaving on Saturday? I keep forgetting.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-18T08:15:00Z"
+  },
+  {
+    "content": "7am sharp, or as sharp as this group ever manages.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-18T10:45:00Z"
+  },
+  {
+    "content": "Fair point, we were 40 minutes late last month.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-18T13:28:00Z"
+  },
+  {
+    "content": "That was one time and it was because Alan forgot his boots.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-18T16:24:00Z"
+  },
+  {
+    "content": "I will never live that down apparently.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-18T19:33:00Z"
+  },
+  {
+    "content": "Unrelated, but has anyone tried the new ramen place on 5th street?",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-18T22:55:00Z"
+  },
+  {
+    "content": "Went there last week, broth was incredible, noodles a bit overcooked though.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-19T02:30:00Z"
+  },
+  {
+    "content": "Good to know, might go Friday before the hike prep.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-19T06:18:00Z"
+  },
+  {
+    "content": "Bring me back a photo of the menu if you go.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-19T10:19:00Z"
+  },
+  {
+    "content": "Will do.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-19T10:33:00Z"
+  },
+  {
+    "content": "Okay switching gears, I need eyes on a bug. My recursive function is blowing the stack on inputs over 10000.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-19T11:00:00Z"
+  },
+  {
+    "content": "Classic. Convert it to an iterative approach with an explicit stack, or add memoization if it's overlapping subproblems.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-20T08:15:00Z"
+  },
+  {
+    "content": "It's a tree traversal, not much overlap to memoize.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-20T09:08:00Z"
+  },
+  {
+    "content": "Then iterative with your own stack structure is the way. Recursion depth in most languages isn't built for that.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-20T10:14:00Z"
+  },
+  {
+    "content": "Makes sense, I'll refactor tonight and report back.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-20T11:33:00Z"
+  },
+  {
+    "content": "Send the diff when you're done, I want to see the before and after.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-20T13:05:00Z"
+  },
+  {
+    "content": "Will do, might take me an hour or two.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-20T14:50:00Z"
+  },
+  {
+    "content": "While you're at it, does anyone have opinions on tail call optimization in general? Worth relying on?",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-20T16:48:00Z"
+  },
+  {
+    "content": "Depends entirely on the language. Never assume your runtime guarantees it unless documented explicitly.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-20T18:59:00Z"
+  },
+  {
+    "content": "That's basically what I suspected, thanks for confirming.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-20T21:23:00Z"
+  },
+  {
+    "content": "On an unrelated note, anyone read anything good lately? I finished my book and need a new one.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-21T00:00:00Z"
+  },
+  {
+    "content": "I just started a biography on the history of computing, really dense but fascinating.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-21T02:50:00Z"
+  },
+  {
+    "content": "Send me the title when you get a chance.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-22T08:15:00Z"
+  },
+  {
+    "content": "Will do after this call I'm in.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-22T11:31:00Z"
+  },
+  {
+    "content": "I've been rereading old sci-fi. There's something comforting about predictions from decades ago that got everything both right and wrong.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-22T15:00:00Z"
+  },
+  {
+    "content": "Which one are you on now?",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-22T18:42:00Z"
+  },
+  {
+    "content": "One about a future where everyone communicates by thought alone. No privacy at all, kind of unsettling in hindsight.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-22T22:37:00Z"
+  },
+  {
+    "content": "That sounds like every social media platform already, honestly.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-22T22:45:00Z"
+  },
+  {
+    "content": "Ha, fair.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-22T23:06:00Z"
+  },
+  {
+    "content": "Reminder that we have the quarterly sync call tomorrow at 10am. Please actually show up on time this quarter.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-22T23:40:00Z"
+  },
+  {
+    "content": "Noted, setting three alarms.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-23T00:27:00Z"
+  },
+  {
+    "content": "I'll be there, already blocked my calendar.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-23T01:27:00Z"
+  },
+  {
+    "content": "Same, though I might be five minutes late, kid has a school thing that morning.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-23T02:40:00Z"
+  },
+  {
+    "content": "Five minutes is fine, forty is not.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-24T08:15:00Z"
+  },
+  {
+    "content": "Understood.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-24T09:54:00Z"
+  },
+  {
+    "content": "Does anyone know a good recipe for a quick weeknight dinner? I'm out of ideas.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-24T11:46:00Z"
+  },
+  {
+    "content": "Sheet pan chicken and vegetables, maybe twenty minutes of actual effort.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-24T13:51:00Z"
+  },
+  {
+    "content": "That sounds doable, what temperature and how long?",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-24T16:09:00Z"
+  },
+  {
+    "content": "425 for about 25 minutes, flip everything halfway.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-24T18:40:00Z"
+  },
+  {
+    "content": "Trying it tonight, thank you.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-24T21:24:00Z"
+  },
+  {
+    "content": "Let us know how it turns out.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-25T00:21:00Z"
+  },
+  {
+    "content": "Will report back with photos.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-25T03:31:00Z"
+  },
+  {
+    "content": "Question for the group, anyone using a new note taking app they actually stuck with?",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-25T06:54:00Z"
+  },
+  {
+    "content": "I switched to a plain text file system with folders, sounds boring but nothing has beaten it for me.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-25T10:30:00Z"
+  },
+  {
+    "content": "No search though?",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-26T08:15:00Z"
+  },
+  {
+    "content": "grep exists for a reason.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-26T12:17:00Z"
+  },
+  {
+    "content": "Can't argue with that logic.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-26T12:32:00Z"
+  },
+  {
+    "content": "Update on the bug from earlier: iterative version works, no more stack overflow even at 100000 elements.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-26T13:00:00Z"
+  },
+  {
+    "content": "Nice, how much slower or faster is it compared to the recursive version?",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-26T13:41:00Z"
+  },
+  {
+    "content": "About 15 percent faster actually, wasn't expecting that.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-26T14:35:00Z"
+  },
+  {
+    "content": "Send the diff, you promised.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-26T15:42:00Z"
+  },
+  {
+    "content": "Sending it over now.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-26T17:02:00Z"
+  },
+  {
+    "content": "Got it, looks clean. Good work.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-26T18:35:00Z"
+  },
+  {
+    "content": "Happy birthday to Isaac by the way! Saw it on the calendar.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-26T20:21:00Z"
+  },
+  {
+    "content": "Oh, thank you! Forgot people could even see that.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-26T22:20:00Z"
+  },
+  {
+    "content": "Happy birthday! Hope it's a good one.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-28T08:15:00Z"
+  },
+  {
+    "content": "Happy birthday, hope cake is involved somewhere today.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-28T10:40:00Z"
+  },
+  {
+    "content": "Cake is very much involved, thank you all.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-28T13:18:00Z"
+  },
+  {
+    "content": "Happy birthday! Don't work too hard today.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-28T16:09:00Z"
+  },
+  {
+    "content": "No promises, but I appreciate it.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-28T19:13:00Z"
+  },
+  {
+    "content": "The weather this week has been unbelievably gray, is anyone else feeling it?",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-28T22:30:00Z"
+  },
+  {
+    "content": "Same, I haven't seen actual sun in what feels like five days.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-29T02:00:00Z"
+  },
+  {
+    "content": "It's supposed to clear up by the weekend for our hike at least.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-29T05:43:00Z"
+  },
+  {
+    "content": "Small mercies.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-29T09:39:00Z"
+  },
+  {
+    "content": "Sheet pan chicken update: it was excellent, thank you Marie.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-29T09:48:00Z"
+  },
+  {
+    "content": "Told you it was easy.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-29T10:10:00Z"
+  },
+  {
+    "content": "Adding it to my regular rotation.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-08-30T08:15:00Z"
+  },
+  {
+    "content": "Reminder, the quarterly sync got moved to 11am instead of 10, conflict with another meeting on my end.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-08-30T09:03:00Z"
+  },
+  {
+    "content": "Updating my calendar now.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-08-30T10:04:00Z"
+  },
+  {
+    "content": "Noted, thanks for the heads up.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-30T11:18:00Z"
+  },
+  {
+    "content": "That actually works better for me, thank you.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-30T12:45:00Z"
+  },
+  {
+    "content": "Does anyone want to split a group order from that ramen place before the hike Friday?",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-30T14:25:00Z"
+  },
+  {
+    "content": "I'm in, get me the spicy miso one.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-08-30T16:18:00Z"
+  },
+  {
+    "content": "I'll pass this time, still full from lunch.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-30T18:24:00Z"
+  },
+  {
+    "content": "More for us then.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-08-30T20:43:00Z"
+  },
+  {
+    "content": "Question, is the trail from Saturday dog friendly? Thinking of bringing mine.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-08-30T23:15:00Z"
+  },
+  {
+    "content": "Should be fine, it's mostly wide dirt path, nothing too narrow or steep.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-08-31T02:00:00Z"
+  },
+  {
+    "content": "Great, he could use the exercise.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-09-01T08:15:00Z"
+  },
+  {
+    "content": "Bring extra water for him too, it gets warm by midday.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-09-01T11:26:00Z"
+  },
+  {
+    "content": "Good call, will pack extra.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-09-01T14:50:00Z"
+  },
+  {
+    "content": "Sync call notes are up in the shared doc if anyone missed it or wants to reference something.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-09-01T18:27:00Z"
+  },
+  {
+    "content": "Thanks, reading through now.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-09-01T22:17:00Z"
+  },
+  {
+    "content": "Appreciate you writing those up every time.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-09-02T02:20:00Z"
+  },
+  {
+    "content": "Somebody has to.",
+    "sender": "Grace Hopper",
+    "timestamp": "2026-09-02T02:36:00Z"
+  },
+  {
+    "content": "Ramen order is in, should be ready by 6.",
+    "sender": "Nikola Tesla",
+    "timestamp": "2026-09-02T03:05:00Z"
+  },
+  {
+    "content": "Perfect, I'll swing by after work.",
+    "sender": "Carl Gauss",
+    "timestamp": "2026-09-02T03:47:00Z"
+  },
+  {
+    "content": "Saturday morning, meeting at the trailhead again, 7am, everyone bring water and snacks.",
+    "sender": "Marie Curie",
+    "timestamp": "2026-09-02T04:42:00Z"
+  },
+  {
+    "content": "Boots are already by the door this time, learned my lesson.",
+    "sender": "Alan Turing",
+    "timestamp": "2026-09-02T05:50:00Z"
+  },
+  {
+    "content": "See everyone bright and early then.",
+    "sender": "Isaac Newton",
+    "timestamp": "2026-09-03T08:15:00Z"
+  },
+  {
+    "content": "Looking forward to it, been a long week.",
+    "sender": "Ada Lovelace",
+    "timestamp": "2026-09-03T09:49:00Z"
+  }
+]
